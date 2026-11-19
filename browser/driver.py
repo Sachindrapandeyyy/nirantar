@@ -29,13 +29,16 @@ class BrowserDriver:
             "--start-maximized"
         ]
 
-        self.browser = await self.playwright.chromium.launch(
+        # Use persistent Chrome profile so logins (LinkedIn, Naukri, Google) are preserved forever
+        settings.CHROME_USER_DATA_DIR.mkdir(parents=True, exist_ok=True)
+        user_data_path = str(settings.CHROME_USER_DATA_DIR)
+
+        self.context = await self.playwright.chromium.launch_persistent_context(
+            user_data_dir=user_data_path,
+            channel="chrome" if settings.USE_REAL_CHROME else None,
             headless=settings.HEADLESS,
             slow_mo=settings.SLOW_MO_MS,
-            args=launch_args
-        )
-
-        self.context = await self.browser.new_context(
+            args=launch_args,
             viewport={"width": 1400, "height": 900},
             user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
             locale="en-IN",
@@ -49,13 +52,13 @@ class BrowserDriver:
             });
         """)
 
-        self.page = await self.context.new_page()
+        self.page = self.context.pages[0] if self.context.pages else await self.context.new_page()
 
         # Auto-inject Comet HUD on page load
         if settings.AGENT_BORDER_GLOW:
             self.page.on("load", lambda page: asyncio.create_task(CometHUD.inject(page)))
 
-        logger.info("Playwright BrowserDriver started successfully.")
+        logger.info(f"Playwright BrowserDriver started using Real Chrome with persistent profile at: {user_data_path}")
         return self.page
 
     async def human_type(self, selector: str, text: str):

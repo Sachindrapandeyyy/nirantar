@@ -17,6 +17,8 @@ class Settings(BaseSettings):
 
     # Browser Automation Settings
     HEADLESS: bool = False
+    USE_REAL_CHROME: bool = True
+    CHROME_USER_DATA_DIR: Path = Path.home() / ".nirantar" / "chrome_profile"
     BROWSER_TIMEOUT_MS: int = 30000
     SLOW_MO_MS: int = 120
     AGENT_BORDER_GLOW: bool = True

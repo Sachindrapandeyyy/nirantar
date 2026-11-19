@@ -151,12 +151,29 @@ async def test_hud_demo():
         await driver.close()
 
 
+async def open_login_session():
+    console.print("\n[bold cyan]Opening Real Chrome with Nirantar Persistent Profile...[/bold cyan]")
+    console.print("[dim]Log in to LinkedIn, Naukri, or Google. Your session will be saved permanently in ~/.nirantar/chrome_profile![/dim]")
+    driver = BrowserDriver()
+    try:
+        page = await driver.start()
+        await page.goto("https://www.linkedin.com/login")
+        await CometHUD.inject(page)
+        await CometHUD.update_status(page, "Login Mode: Sign in to your account. Saved permanently.")
+        console.print("[green]Chrome is ready. Log in to your accounts, then press ENTER here to save...[/green]")
+        await asyncio.to_thread(input, "Press ENTER after logging in: ")
+    finally:
+        await driver.close()
+        console.print("[bold green]✔ Persistent profile updated successfully![/bold green]")
+
+
 def main():
     print_banner()
     if len(sys.argv) < 2:
         console.print("[yellow]Usage:[/yellow]")
         console.print("  python main.py apply <url> [job_title] [company]")
         console.print("  python main.py status")
+        console.print("  python main.py login")
         console.print("  python main.py check-email")
         console.print("  python main.py test-hud")
         return
@@ -164,6 +181,8 @@ def main():
     cmd = sys.argv[1].lower()
     if cmd == "status":
         show_status()
+    elif cmd == "login":
+        asyncio.run(open_login_session())
     elif cmd == "check-email":
         console.print("[cyan]Checking inbox for interview updates...[/cyan]")
         watcher = EmailWatcher()
