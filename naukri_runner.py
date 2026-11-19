@@ -174,8 +174,8 @@ async def run_naukri_flow():
 
                 # Match resume type dynamically
                 match_res = matcher.match(title)
-                selected_resume = match_res.selected_resume_type
-                score = match_res.compatibility_score
+                selected_resume = match_res.resume_type
+                score = match_res.score
 
                 print(f"---> [{i+1}/10] Inspecting: {title}", flush=True)
                 print(f"     Optimal Resume: {selected_resume.upper()} | Score: {score:.2f}", flush=True)

@@ -93,6 +93,14 @@ class MatchResult(BaseModel):
     matched_keywords: List[str] = Field(default_factory=list)
     reasoning: str
 
+    @property
+    def selected_resume_type(self) -> str:
+        return self.resume_type
+
+    @property
+    def compatibility_score(self) -> float:
+        return self.score
+
 
 class JobListing(BaseModel):
     id: Optional[str] = None
