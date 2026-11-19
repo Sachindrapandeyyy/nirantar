@@ -1,5 +1,7 @@
 import asyncio
+import subprocess
 import time
+import httpx
 from playwright.async_api import async_playwright
 from core.vault import vault
 
@@ -7,6 +9,32 @@ async def execute_live_workflow():
     profile = vault.get_profile()
     resume_path = vault.get_resume("java")
     
+    # 1. Ensure Chrome is running with remote debugging port 9222
+    cdp_ready = False
+    try:
+        r = httpx.get("http://127.0.0.1:9222/json/version", timeout=1.0)
+        cdp_ready = r.status_code == 200
+    except Exception:
+        pass
+
+    if not cdp_ready:
+        print("Launching Real Google Chrome on your screen...")
+        subprocess.Popen([
+            r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+            "--remote-debugging-port=9222",
+            r"--user-data-dir=C:\Users\Sachi\.nirantar\chrome_profile",
+            "--start-maximized"
+        ])
+        for _ in range(10):
+            await asyncio.sleep(1)
+            try:
+                r = httpx.get("http://127.0.0.1:9222/json/version", timeout=1.0)
+                if r.status_code == 200:
+                    cdp_ready = True
+                    break
+            except Exception:
+                pass
+
     print("Connecting Nirantar Agent to your active Chrome on screen...")
     async with async_playwright() as p:
         # Connect to the running Chrome on port 9222
