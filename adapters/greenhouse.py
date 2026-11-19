@@ -44,9 +44,21 @@ class GreenhouseAdapter(BaseAdapter):
             if await frame.locator("#phone").count() > 0:
                 await frame.locator("#phone").fill(profile.phone)
 
-            # Location / City
+            # Location / Country
+            if await frame.locator("#country").count() > 0:
+                await frame.locator("#country").fill("India")
             if await frame.locator("#job_application_location").count() > 0:
                 await frame.locator("#job_application_location").fill(f"{profile.city}, {profile.country}")
+
+            # Education Details
+            if profile.education:
+                edu = profile.education[0]
+                if await frame.locator("#school--0").count() > 0:
+                    await frame.locator("#school--0").fill(edu.institution)
+                if await frame.locator("#degree--0").count() > 0:
+                    await frame.locator("#degree--0").fill(edu.degree)
+                if await frame.locator("#discipline--0").count() > 0:
+                    await frame.locator("#discipline--0").fill(edu.field_of_study)
 
             # Social links
             linkedin_inputs = frame.locator("input[id*='linkedin'], input[name*='linkedin']")
