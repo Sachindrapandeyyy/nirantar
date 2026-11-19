@@ -69,6 +69,8 @@ class AutonomousNaukriAgent:
         self.proof_dir.mkdir(parents=True, exist_ok=True)
         self.total_applied = 0
         self.cycle_count = 1
+        self.last_profile_refresh_time = 0.0
+        self.PROFILE_REFRESH_INTERVAL = 2 * 3600  # 2 Hours in seconds
 
     async def inject_hud(self, page: Page, title: str, subtitle: str = ""):
         """Injects a high-visibility futuristic HUD banner at the top of Chrome."""
@@ -134,12 +136,26 @@ class AutonomousNaukriAgent:
         ]
         return any(term in title_lower for term in whitelist)
 
-    async def optimize_profile_and_boost_rank(self, page: Page):
-        """Phase 1: Profile Optimizer & Daily Algo Rank Booster."""
+    async def optimize_profile_and_boost_rank(self, page: Page, force: bool = False):
+        """
+        Phase 1: Resdex Algorithm Hack (2-Hour Profile Dot Refresh).
+        Every 2 hours, visits profile, toggles a trailing dot '.' in Resume Headline & Profile Summary,
+        and saves. This forces Naukri's backend to refresh 'Last Active / Updated' timestamp to 'JUST NOW',
+        boosting candidate to #1 rank in recruiter search filters!
+        """
+        import time
+        now = time.time()
+        elapsed = now - self.last_profile_refresh_time
+
+        if not force and self.last_profile_refresh_time > 0 and elapsed < self.PROFILE_REFRESH_INTERVAL:
+            remaining_mins = int((self.PROFILE_REFRESH_INTERVAL - elapsed) // 60)
+            print(f"ℹ Resdex Rank Booster: Profile was recently refreshed. Next 2-hour dot toggle in {remaining_mins} minutes.", flush=True)
+            return
+
         print("\n" + "=" * 70, flush=True)
-        print(f" [PHASE 1] NAUKRI ALGORITHM BOOSTER (Cycle #{self.cycle_count})", flush=True)
+        print(f" [ALGO HACK] 2-HOUR PROFILE REFRESH: TOGGLING RESDEX DOT (Cycle #{self.cycle_count})", flush=True)
         print("=" * 70, flush=True)
-        await self.inject_hud(page, "Phase 1: Optimizing Profile & Boosting Resdex Rank", "Updating Resume Headline to Today")
+        await self.inject_hud(page, "2-Hour Profile Refresh: Toggling Dot '.'", "Resetting Resdex Search Rank to #1 (Active: Just Now)")
 
         try:
             await page.goto("https://www.naukri.com/mnjuser/profile", wait_until="domcontentloaded")
@@ -150,7 +166,7 @@ class AutonomousNaukriAgent:
                 score_text = (await score_el.inner_text()).strip()
                 print(f"✔ Current Naukri Profile Score: {score_text}", flush=True)
 
-            optimal_headline = "Python Developer | FastAPI | Django | PostgreSQL | Redis | REST APIs | Microservices | B.Tech CSE (2026) | Immediate Joiner"
+            # 1. Toggle dot on Resume Headline
             headline_edit_btn = page.locator("div.resumeHeadline span.edit, div.resumeHeadline a:has-text('Edit'), span:has-text('Resume Headline') + span.edit").first
             if await headline_edit_btn.count() > 0 and await headline_edit_btn.is_visible():
                 await headline_edit_btn.click()
@@ -158,16 +174,56 @@ class AutonomousNaukriAgent:
 
                 textarea = page.locator("textarea#resumeHeadlineTxt, div.resumeHeadline textarea").first
                 if await textarea.count() > 0:
-                    await textarea.fill(optimal_headline)
+                    current_txt = (await textarea.input_value()).strip()
+                    if not current_txt:
+                        current_txt = "Python Developer | FastAPI | Django | PostgreSQL | Redis | REST APIs | Microservices | B.Tech CSE (2026) | Immediate Joiner"
+
+                    # Toggle dot
+                    if current_txt.endswith("."):
+                        new_txt = current_txt.rstrip(".")
+                        action_msg = "Removed trailing dot '.'"
+                    else:
+                        new_txt = current_txt + "."
+                        action_msg = "Added trailing dot '.'"
+
+                    print(f"Resume Headline: {action_msg} -> '{new_txt[-25:]}'", flush=True)
+                    await textarea.fill(new_txt)
                     await asyncio.sleep(0.8)
 
                     save_btn = page.locator("form[name='resumeHeadlineForm'] button:has-text('Save'), button.saveBtn:has-text('Save')").first
                     if await save_btn.count() > 0:
                         await save_btn.click()
                         await asyncio.sleep(2)
-                        print("✔ RESUME HEADLINE RE-SAVED! Profile timestamp updated to TODAY (Resdex #1 Rank Active)!", flush=True)
+                        self.last_profile_refresh_time = now
+                        print(f"✔ RESDEX RANK RESET TO #1! Profile updated successfully ({action_msg})!", flush=True)
+                        await self.inject_hud(page, "Profile Refreshed!", f"Resdex Rank: #1 (Active: Just Now) - {action_msg}")
+
+            # 2. Also toggle dot on Profile Summary if present
+            summary_edit_btn = page.locator("div.profileSummary span.edit, div.profileSummary a:has-text('Edit')").first
+            if await summary_edit_btn.count() > 0 and await summary_edit_btn.is_visible():
+                try:
+                    await summary_edit_btn.click()
+                    await asyncio.sleep(1.2)
+                    sum_textarea = page.locator("textarea#profileSummaryTxt, div.profileSummary textarea").first
+                    if await sum_textarea.count() > 0:
+                        sum_txt = (await sum_textarea.input_value()).strip()
+                        if sum_txt:
+                            if sum_txt.endswith("."):
+                                sum_new = sum_txt.rstrip(".")
+                            else:
+                                sum_new = sum_txt + "."
+                            await sum_textarea.fill(sum_new)
+                            await asyncio.sleep(0.8)
+                            sum_save = page.locator("form[name='profileSummaryForm'] button:has-text('Save'), button.saveBtn:has-text('Save')").first
+                            if await sum_save.count() > 0:
+                                await sum_save.click()
+                                await asyncio.sleep(1.5)
+                                print("✔ Profile Summary dot also synchronized!", flush=True)
+                except Exception:
+                    pass
+
         except Exception as e:
-            print(f"Profile Optimization Note: {e}", flush=True)
+            print(f"Profile Dot Refresh Note: {e}", flush=True)
 
     async def scan_recruiter_radar(self, page: Page):
         """Phase 2: Recruiter Radar."""
