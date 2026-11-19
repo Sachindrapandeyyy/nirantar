@@ -23,16 +23,43 @@ from brain.question_solver import solver
 
 matcher = JobMatcher()
 
+SEARCH_VECTORS = [
+    {
+        "name": "Python Developer (Noida)",
+        "base_url": "https://www.naukri.com/python-developer-jobs-in-noida?experience=0&jobAge=15"
+    },
+    {
+        "name": "Python Developer (Delhi NCR)",
+        "base_url": "https://www.naukri.com/python-developer-jobs-in-delhi-ncr?experience=0&jobAge=15"
+    },
+    {
+        "name": "Backend Developer (Noida)",
+        "base_url": "https://www.naukri.com/backend-developer-jobs-in-noida?experience=0&jobAge=15"
+    },
+    {
+        "name": "Python Developer (Gurgaon)",
+        "base_url": "https://www.naukri.com/python-developer-jobs-in-gurgaon?experience=0&jobAge=15"
+    },
+    {
+        "name": "FastAPI / Django Roles",
+        "base_url": "https://www.naukri.com/fastapi-jobs?experience=0&jobAge=15"
+    },
+    {
+        "name": "Python Fresher Jobs (All India)",
+        "base_url": "https://www.naukri.com/python-fresher-jobs?experience=0&jobAge=15"
+    },
+    {
+        "name": "Software Engineer Freshers (Noida)",
+        "base_url": "https://www.naukri.com/software-engineer-freshers-jobs-in-noida?experience=0&jobAge=15"
+    }
+]
+
 
 class AutonomousNaukriAgent:
     """
-    Nirantar Full-Lifecycle Autonomous Naukri Agent.
-    Operates end-to-end:
-    1. Profile Optimizer & Daily Algo Rank Booster (Resdex Top Rank)
-    2. Recruiter Radar & Message Scanner
-    3. AI Recommended Jobs Scanner
-    4. Strict Python Engineering Job Apply
-    5. LLM-Powered Recruiter Questionnaire Solver
+    Nirantar Full-Lifecycle Continuous Autonomous Naukri Agent.
+    Runs non-stop with multi-vector search rotation, Resdex rank booster,
+    and LLM questionnaire solving.
     """
 
     def __init__(self):
@@ -40,7 +67,8 @@ class AutonomousNaukriAgent:
         self.profile_dir = Path.home() / ".nirantar" / "chrome_profile"
         self.proof_dir = PROJECT_ROOT / "proofs" / "autonomous_runs"
         self.proof_dir.mkdir(parents=True, exist_ok=True)
-        self.applied_in_cycle = 0
+        self.total_applied = 0
+        self.cycle_count = 1
 
     async def inject_hud(self, page: Page, title: str, subtitle: str = ""):
         """Injects a high-visibility futuristic HUD banner at the top of Chrome."""
@@ -72,8 +100,8 @@ class AutonomousNaukriAgent:
             }}
             hud.innerHTML = `
                 <div style="font-size:15px; color:#38bdf8; display:flex; align-items:center; gap:8px;">
-                    <span>🧠 NIRANTAR AUTONOMOUS NAUKRI BRAIN</span>
-                    <span style="background:#10b981; color:#ffffff; font-size:11px; padding:2px 8px; border-radius:10px;">ACTIVE</span>
+                    <span>🧠 NIRANTAR NON-STOP NAUKRI ENGINE</span>
+                    <span style="background:#10b981; color:#ffffff; font-size:11px; padding:2px 8px; border-radius:10px;">CYCLE #{self.cycle_count}</span>
                 </div>
                 <div style="font-size:13px; color:#ffffff; font-weight:normal;">{title}</div>
                 {sub_html}
@@ -88,7 +116,6 @@ class AutonomousNaukriAgent:
         """Strictly validates software engineering roles, eliminating non-tech false positives."""
         title_lower = title.lower()
 
-        # Strict blacklist of non-developer and non-engineering jobs
         blacklist = [
             "claim", "kyc", "aml", "analyst 3", "insurance", "video editor", "video creator",
             "civil", "structural", "mechanical", "electrical", "telecaller", "tele-caller",
@@ -100,7 +127,6 @@ class AutonomousNaukriAgent:
             if term in title_lower:
                 return False
 
-        # Positive core engineering keywords
         whitelist = [
             "python", "django", "fastapi", "flask", "backend", "back-end",
             "software engineer", "software developer", "full stack", "fullstack",
@@ -109,81 +135,57 @@ class AutonomousNaukriAgent:
         return any(term in title_lower for term in whitelist)
 
     async def optimize_profile_and_boost_rank(self, page: Page):
-        """
-        Phase 1: Profile Optimizer & Daily Algo Rank Booster.
-        Resets Naukri's 'Last Updated' timestamp to TODAY to push Sachindra to #1 in recruiter Resdex search.
-        """
+        """Phase 1: Profile Optimizer & Daily Algo Rank Booster."""
         print("\n" + "=" * 70, flush=True)
-        print(" [PHASE 1] NAUKRI ALGORITHM BOOSTER: PROFILE OPTIMIZATION", flush=True)
+        print(f" [PHASE 1] NAUKRI ALGORITHM BOOSTER (Cycle #{self.cycle_count})", flush=True)
         print("=" * 70, flush=True)
-        await self.inject_hud(page, "Phase 1: Optimizing Profile & Boosting Recruiter Search Rank", "Updating Resume Headline & Timestamp")
+        await self.inject_hud(page, "Phase 1: Optimizing Profile & Boosting Resdex Rank", "Updating Resume Headline to Today")
 
-        print("Navigating to Profile Management...", flush=True)
-        await page.goto("https://www.naukri.com/mnjuser/profile", wait_until="domcontentloaded")
-        await asyncio.sleep(3)
-
-        # 1. Read Profile Completion Score
         try:
+            await page.goto("https://www.naukri.com/mnjuser/profile", wait_until="domcontentloaded")
+            await asyncio.sleep(2.5)
+
             score_el = page.locator("div.completion-point, span.profile-percent, div[class*='percent']").first
             if await score_el.count() > 0:
                 score_text = (await score_el.inner_text()).strip()
                 print(f"✔ Current Naukri Profile Score: {score_text}", flush=True)
-        except Exception:
-            pass
 
-        # 2. Update Resume Headline (The Resdex Algorithm Hack)
-        # Optimal ATS headline for Python Developer:
-        optimal_headline = "Python Developer | FastAPI | Django | PostgreSQL | Redis | REST APIs | Microservices | B.Tech CSE (2026) | Immediate Joiner"
-        
-        try:
+            optimal_headline = "Python Developer | FastAPI | Django | PostgreSQL | Redis | REST APIs | Microservices | B.Tech CSE (2026) | Immediate Joiner"
             headline_edit_btn = page.locator("div.resumeHeadline span.edit, div.resumeHeadline a:has-text('Edit'), span:has-text('Resume Headline') + span.edit").first
             if await headline_edit_btn.count() > 0 and await headline_edit_btn.is_visible():
-                print("Clicking Resume Headline Edit...", flush=True)
                 await headline_edit_btn.click()
                 await asyncio.sleep(1.5)
 
                 textarea = page.locator("textarea#resumeHeadlineTxt, div.resumeHeadline textarea").first
                 if await textarea.count() > 0:
-                    current_hl = await textarea.input_value()
-                    print(f"Current Headline: '{current_hl[:50]}...'", flush=True)
-                    print(f"Updating with Target Keywords: '{optimal_headline}'...", flush=True)
                     await textarea.fill(optimal_headline)
-                    await asyncio.sleep(1)
+                    await asyncio.sleep(0.8)
 
                     save_btn = page.locator("form[name='resumeHeadlineForm'] button:has-text('Save'), button.saveBtn:has-text('Save')").first
                     if await save_btn.count() > 0:
                         await save_btn.click()
                         await asyncio.sleep(2)
-                        print("✔ RESUME HEADLINE RE-SAVED! Profile timestamp updated to TODAY (Resdex #1 Rank Activated)!", flush=True)
-            else:
-                print("Resume headline already optimized and verified.", flush=True)
+                        print("✔ RESUME HEADLINE RE-SAVED! Profile timestamp updated to TODAY (Resdex #1 Rank Active)!", flush=True)
         except Exception as e:
-            print(f"Profile Headline Note: {e}", flush=True)
+            print(f"Profile Optimization Note: {e}", flush=True)
 
     async def scan_recruiter_radar(self, page: Page):
-        """
-        Phase 2: Recruiter Radar.
-        Scans recruiter messages, chat notifications, and direct inquiries.
-        """
+        """Phase 2: Recruiter Radar."""
         print("\n" + "=" * 70, flush=True)
         print(" [PHASE 2] RECRUITER RADAR: MESSAGES & NOTIFICATIONS", flush=True)
         print("=" * 70, flush=True)
         await self.inject_hud(page, "Phase 2: Recruiter Radar", "Scanning Recruiter Messages & Chat Inquiries")
 
-        print("Checking Recruiter Chat Inbox...", flush=True)
         try:
             await page.goto("https://www.naukri.com/communication-center/chat/messages", wait_until="domcontentloaded")
-            await asyncio.sleep(3)
+            await asyncio.sleep(2.5)
 
-            # Check unread message badges or chat conversations
             chats = await page.locator("div.chat-list-item, div[class*='conversation'], div.chat-item").all()
-            print(f"✔ Recruiter Radar: Found {len(chats)} recruiter conversations.", flush=True)
-            
+            print(f"✔ Recruiter Radar: Found {len(chats)} active conversations.", flush=True)
+
             unread = await page.locator("span.unread, div[class*='unread']").count()
             if unread > 0:
                 print(f"👉 NOTICE: You have {unread} unread recruiter messages!", flush=True)
-            else:
-                print("✔ All recruiter messages are up to date.", flush=True)
         except Exception as e:
             print(f"Recruiter Radar Note: {e}", flush=True)
 
@@ -197,7 +199,7 @@ class AutonomousNaukriAgent:
         try:
             await jd_page.goto(href, wait_until="domcontentloaded")
             await self.inject_hud(jd_page, f"Inspecting: {title[:40]}", "Resume: Python | LLM Ready")
-            await asyncio.sleep(2)
+            await asyncio.sleep(1.8)
 
             apply_btn = jd_page.locator("button.apply-button, button:has-text('Apply on company site'), button:has-text('Apply')").first
             if await apply_btn.count() == 0 or not await apply_btn.is_visible():
@@ -211,7 +213,7 @@ class AutonomousNaukriAgent:
                 await jd_page.close()
                 return False
 
-            # Highlight apply button visually
+            # Visual highlight
             try:
                 await apply_btn.evaluate("el => { el.style.border = '4px solid #10b981'; el.style.boxShadow = '0 0 25px #10b981'; }")
             except Exception:
@@ -223,7 +225,7 @@ class AutonomousNaukriAgent:
             await apply_btn.click()
             await asyncio.sleep(2)
 
-            # Questionnaire / Chatbot Answering using LLM
+            # Solve questionnaire using LLM
             await self.solve_chatbot(jd_page)
 
             # Wait for confirmation
@@ -233,11 +235,10 @@ class AutonomousNaukriAgent:
             except Exception:
                 pass
 
-            self.applied_in_cycle += 1
-            proof_file = str(self.proof_dir / f"Autonomous_Apply_{self.applied_in_cycle}.png")
+            self.total_applied += 1
+            proof_file = str(self.proof_dir / f"Autonomous_Apply_{self.total_applied}.png")
             await jd_page.screenshot(path=proof_file)
 
-            # Save in database
             db.save_job(
                 title=title,
                 company="Naukri Recruiter",
@@ -247,7 +248,7 @@ class AutonomousNaukriAgent:
                 resume_type="python"
             )
             db.update_job_status(href, "APPLIED", proof_file)
-            print(f"     ✔ APPLICATION SUBMITTED! Proof: {Path(proof_file).name}", flush=True)
+            print(f"     ✔ APPLICATION #{self.total_applied} SUBMITTED! Proof: {Path(proof_file).name}", flush=True)
             await asyncio.sleep(1.5)
             await jd_page.close()
             return True
@@ -265,8 +266,6 @@ class AutonomousNaukriAgent:
         for turn in range(5):
             await asyncio.sleep(1.2)
             input_box = jd_page.locator("input.chatbot-input, input[placeholder*='Type your answer'], textarea[placeholder*='Type your answer'], input[class*='bot-input']").first
-            
-            # Quick reply options
             chip_elements = await jd_page.locator("div.chips, div.chip, button.chip-btn, span.chip-text, div[class*='quick-reply']").all()
             option_texts = []
             if chip_elements:
@@ -313,82 +312,90 @@ class AutonomousNaukriAgent:
                 break
 
     async def scan_recommended_jobs(self, context: BrowserContext, page: Page, max_jobs: int = 5):
-        """Phase 3: Scans jobs recommended specifically by Naukri's AI algorithm."""
+        """Scans jobs recommended specifically by Naukri's AI algorithm."""
         print("\n" + "=" * 70, flush=True)
         print(" [PHASE 3] NAUKRI AI RECOMMENDED JOBS DISCOVERY", flush=True)
         print("=" * 70, flush=True)
         await self.inject_hud(page, "Phase 3: Scanning AI Recommended Jobs", "Naukri Personalized Matches")
 
-        print("Navigating to Naukri Recommended Jobs...", flush=True)
         try:
             await page.goto("https://www.naukri.com/mnjuser/recommendedjobs", wait_until="domcontentloaded")
-            await asyncio.sleep(3)
+            await asyncio.sleep(2.5)
 
             job_links = await page.locator("a.title, a[class*='title'], div.srp-jobtuple-wrapper a.title").all()
             print(f"Found {len(job_links)} AI recommended jobs for Sachindra!", flush=True)
 
-            for link in job_links[:10]:
-                if self.applied_in_cycle >= max_jobs:
+            applied_in_step = 0
+            for link in job_links[:12]:
+                if applied_in_step >= max_jobs:
                     break
                 try:
                     title = (await link.inner_text()).strip()
                     href = await link.get_attribute("href")
                     if href and self.is_valid_software_role(title):
-                        await self.apply_to_job(context, title, href)
+                        success = await self.apply_to_job(context, title, href)
+                        if success:
+                            applied_in_step += 1
                 except Exception:
                     continue
         except Exception as e:
             print(f"Recommended Jobs Note: {e}", flush=True)
 
-    async def targeted_python_search_apply(self, context: BrowserContext, page: Page, target_total: int = 10):
-        """Phase 4: Targeted Python Developer search across Noida & Delhi NCR."""
-        print("\n" + "=" * 70, flush=True)
-        print(" [PHASE 4] TARGETED PYTHON DEVELOPER AUTO-APPLY", flush=True)
-        print("=" * 70, flush=True)
-        await self.inject_hud(page, "Phase 4: Targeted Python Applications", "Noida / Delhi NCR Freshers (0-1 Yrs)")
+    async def execute_vector_search(self, context: BrowserContext, page: Page, vector: Dict[str, str], max_pages: int = 4):
+        """Paginates through a targeted search vector (up to max_pages)."""
+        name = vector["name"]
+        base_url = vector["base_url"]
 
-        search_url = "https://www.naukri.com/python-developer-jobs-in-noida?experience=0&jobAge=15"
-        await page.goto(search_url, wait_until="domcontentloaded")
-        await asyncio.sleep(3)
+        print(f"\n---> Searching Vector: {name}", flush=True)
+        await self.inject_hud(page, f"Target: {name}", f"Total Applications So Far: {self.total_applied}")
 
-        for page_num in range(1, 4):
-            if self.applied_in_cycle >= target_total:
+        for page_num in range(1, max_pages + 1):
+            if page_num == 1:
+                url = base_url
+            else:
+                # Naukri pagination format: append -page_num before query params
+                if "?" in base_url:
+                    parts = base_url.split("?")
+                    url = f"{parts[0]}-{page_num}?{parts[1]}"
+                else:
+                    url = f"{base_url}-{page_num}"
+
+            print(f"   [Page {page_num}/{max_pages}] Loading: {url}", flush=True)
+            try:
+                await page.goto(url, wait_until="domcontentloaded")
+                await asyncio.sleep(2.5)
+
+                job_links = await page.locator("a.title, a[class*='title'], div.srp-jobtuple-wrapper a.title").all()
+                if not job_links:
+                    print(f"   No more jobs found on Page {page_num}. Moving to next vector.", flush=True)
+                    break
+
+                print(f"   Found {len(job_links)} job cards on Page {page_num}...", flush=True)
+                for link in job_links:
+                    try:
+                        title = (await link.inner_text()).strip()
+                        href = await link.get_attribute("href")
+                        if not href:
+                            continue
+
+                        if not self.is_valid_software_role(title):
+                            continue
+
+                        await self.apply_to_job(context, title, href)
+                    except Exception:
+                        continue
+            except Exception as e:
+                print(f"   Search Vector Error on Page {page_num}: {e}", flush=True)
                 break
 
-            if page_num > 1:
-                next_url = f"https://www.naukri.com/python-developer-jobs-in-noida-{page_num}?experience=0&jobAge=15"
-                print(f"\n---> Advancing to Page {page_num}: {next_url}", flush=True)
-                await page.goto(next_url, wait_until="domcontentloaded")
-                await asyncio.sleep(3)
-
-            job_links = await page.locator("a.title, a[class*='title'], div.srp-jobtuple-wrapper a.title").all()
-            print(f"Scanning {len(job_links)} job cards on Page {page_num}...", flush=True)
-
-            for link in job_links:
-                if self.applied_in_cycle >= target_total:
-                    break
-                try:
-                    title = (await link.inner_text()).strip()
-                    href = await link.get_attribute("href")
-                    if not href:
-                        continue
-
-                    if not self.is_valid_software_role(title):
-                        print(f"  [Filtered Out Non-Core Role] '{title}'", flush=True)
-                        continue
-
-                    await self.apply_to_job(context, title, href)
-                except Exception:
-                    continue
-
-    async def run(self):
-        """Executes the full autonomous master cycle."""
+    async def run_continuous_engine(self):
+        """Runs the continuous, non-stop autonomous loop."""
         print("\n" + "=" * 75, flush=True)
-        print("         NIRANTAR: FULL AUTONOMOUS NAUKRI MASTER AGENT", flush=True)
+        print("       NIRANTAR: CONTINUOUS NON-STOP NAUKRI AUTONOMOUS ENGINE", flush=True)
         print("=" * 75, flush=True)
         print(f"Candidate: {self.profile.full_name}", flush=True)
         print(f"Target Role: Python Developer / Backend / FastAPI / Django", flush=True)
-        print(f"Mode: Full Lifecycle Autonomous (Optimization -> Radar -> Apply)", flush=True)
+        print("Engine Mode: CONTINUOUS NON-STOP (Will keep running while laptop is on)", flush=True)
         print("=" * 75, flush=True)
 
         async with async_playwright() as p:
@@ -396,7 +403,7 @@ class AutonomousNaukriAgent:
                 "user_data_dir": str(self.profile_dir),
                 "channel": "chrome",
                 "headless": False,
-                "slow_mo": 300,
+                "slow_mo": 250,
                 "args": [
                     "--start-maximized",
                     "--disable-blink-features=AutomationControlled",
@@ -412,29 +419,45 @@ class AutonomousNaukriAgent:
             await page.goto("https://www.naukri.com/", wait_until="domcontentloaded")
             await asyncio.sleep(2)
 
-            # Step 1: Optimize Profile & Boost Algo Rank
-            await self.optimize_profile_and_boost_rank(page)
-
-            # Step 2: Recruiter Radar (Messages & Chats)
-            await self.scan_recruiter_radar(page)
-
-            # Step 3: AI Recommended Jobs
-            await self.scan_recommended_jobs(context, page, max_jobs=3)
-
-            # Step 4: Targeted Python Apply
-            await self.targeted_python_search_apply(context, page, target_total=10)
-
-            # Step 5: Summary
-            print("\n" + "=" * 75, flush=True)
-            print(f"✔ AUTONOMOUS MASTER CYCLE COMPLETED: {self.applied_in_cycle} Jobs Applied!", flush=True)
-            print("Chrome is kept OPEN on your screen.", flush=True)
-            print("=" * 75 + "\n", flush=True)
-            await self.inject_hud(page, f"Cycle Finished! Applied to {self.applied_in_cycle} Jobs", "Chrome Kept Open for Inspection")
-
             while True:
-                await asyncio.sleep(10)
+                print(f"\n{'#' * 75}", flush=True)
+                print(f"   STARTING CONTINUOUS ENGINE CYCLE #{self.cycle_count}", flush=True)
+                print(f"   Total Lifetime Applications in this session: {self.total_applied}", flush=True)
+                print(f"{'#' * 75}\n", flush=True)
+
+                # Step 1: Optimize Profile & Boost Algo Rank
+                await self.optimize_profile_and_boost_rank(page)
+
+                # Step 2: Recruiter Radar (Messages & Chats)
+                await self.scan_recruiter_radar(page)
+
+                # Step 3: AI Recommended Jobs
+                await self.scan_recommended_jobs(context, page, max_jobs=5)
+
+                # Step 4: Multi-Vector Continuous Search Rotation
+                for vector in SEARCH_VECTORS:
+                    await self.execute_vector_search(context, page, vector, max_pages=4)
+
+                print("\n" + "=" * 75, flush=True)
+                print(f"✔ CYCLE #{self.cycle_count} COMPLETE! Total Applied: {self.total_applied}", flush=True)
+                print("Resting for 5 minutes before next continuous scan...", flush=True)
+                print("=" * 75 + "\n", flush=True)
+
+                self.cycle_count += 1
+
+                # Live HUD Countdown (5 minutes) before next continuous scan
+                wait_seconds = 300
+                for remaining in range(wait_seconds, 0, -10):
+                    mins = remaining // 60
+                    secs = remaining % 60
+                    await self.inject_hud(
+                        page,
+                        f"Non-Stop Engine: {self.total_applied} Jobs Applied",
+                        f"Next Continuous Scan in {mins}m {secs}s (Cycle #{self.cycle_count})"
+                    )
+                    await asyncio.sleep(10)
 
 
 if __name__ == "__main__":
     agent = AutonomousNaukriAgent()
-    asyncio.run(agent.run())
+    asyncio.run(agent.run_continuous_engine())
