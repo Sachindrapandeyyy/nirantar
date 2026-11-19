@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Optional
 from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, Text
 from sqlalchemy.orm import declarative_base, sessionmaker
@@ -19,7 +19,7 @@ class JobRecord(Base):
     resume_type = Column(String(50), default="java")
     status = Column(String(50), default="DISCOVERED")
     screenshot_path = Column(Text, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     applied_at = Column(DateTime, nullable=True)
 
 
@@ -30,7 +30,7 @@ class AuditLogRecord(Base):
     job_id = Column(Integer, nullable=True)
     event = Column(String(100), nullable=False)
     message = Column(Text, nullable=False)
-    timestamp = Column(DateTime, default=datetime.utcnow)
+    timestamp = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
 
 # Engine & Session
@@ -74,7 +74,7 @@ class DatabaseManager:
                 if screenshot_path:
                     job.screenshot_path = screenshot_path
                 if status == "APPLIED":
-                    job.applied_at = datetime.utcnow()
+                    job.applied_at = datetime.now(timezone.utc)
                 session.commit()
         finally:
             session.close()

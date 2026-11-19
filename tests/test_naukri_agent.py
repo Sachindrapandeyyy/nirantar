@@ -1,23 +1,23 @@
 import pytest
-from core.naukri_agent import AutonomousNaukriAgent
+from naukri.agent import AutonomousNaukriAgent
+from naukri.filters import is_valid_software_role
 from core.matcher import matcher
 from tracker.database import db
 
 
 def test_agent_role_filtering():
-    agent = AutonomousNaukriAgent()
     # Positive software roles
-    assert agent.is_valid_software_role("Python Developer") is True
-    assert agent.is_valid_software_role("Backend Software Engineer") is True
-    assert agent.is_valid_software_role("FastAPI / Django Engineer") is True
-    assert agent.is_valid_software_role("AI Engineer Intern") is True
+    assert is_valid_software_role("Python Developer") is True
+    assert is_valid_software_role("Backend Software Engineer") is True
+    assert is_valid_software_role("FastAPI / Django Engineer") is True
+    assert is_valid_software_role("AI Engineer Intern") is True
 
     # Negative non-tech / noise roles
-    assert agent.is_valid_software_role("Insurance Claim - Backend Operations") is False
-    assert agent.is_valid_software_role("AML/KYC Analyst - Finance Domain") is False
-    assert agent.is_valid_software_role("AI Video Editor Intern") is False
-    assert agent.is_valid_software_role("Telecaller Support") is False
-    assert agent.is_valid_software_role("Field Sales Executive") is False
+    assert is_valid_software_role("Insurance Claim - Backend Operations") is False
+    assert is_valid_software_role("AML/KYC Analyst - Finance Domain") is False
+    assert is_valid_software_role("AI Video Editor Intern") is False
+    assert is_valid_software_role("Telecaller Support") is False
+    assert is_valid_software_role("Field Sales Executive") is False
 
 
 def test_database_deduplication():
