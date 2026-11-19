@@ -328,12 +328,23 @@ class AutonomousNaukriAgent:
             # Solve questionnaire using LLM
             await self.solve_chatbot(jd_page)
 
-            # Wait for confirmation
-            try:
-                success_el = jd_page.locator("div:has-text('successfully applied'), div[class*='apply-message']").first
-                await success_el.wait_for(timeout=3500)
-            except Exception:
-                pass
+            # Active 1-Click Submission Verification Loop (up to 8 seconds)
+            verified_1click = False
+            for _ in range(16):
+                await asyncio.sleep(0.5)
+                success_el = jd_page.locator("div:has-text('successfully applied'), div[class*='apply-message'], div.apply-success, div[class*='success-msg']").first
+                if await success_el.count() > 0 and await success_el.is_visible():
+                    verified_1click = True
+                    break
+                page_text = (await jd_page.content()).lower()
+                if any(kw in page_text for kw in ["successfully applied", "application has been sent", "applied successfully"]):
+                    verified_1click = True
+                    break
+
+            if not verified_1click:
+                print(f"  ⚠️ [Unverified Application] 1-Click apply on Naukri could not be confirmed for '{title}'. Skipping false count.", flush=True)
+                await jd_page.close()
+                return False
 
             self.total_applied += 1
             proof_file = str(self.proof_dir / f"Autonomous_Apply_{self.total_applied}.png")
@@ -348,7 +359,7 @@ class AutonomousNaukriAgent:
                 resume_type=resume_type
             )
             db.update_job_status(href, "APPLIED", proof_file)
-            print(f"     ✔ APPLICATION #{self.total_applied} SUBMITTED! [{resume_type.upper()} RESUME] Proof: {Path(proof_file).name}", flush=True)
+            print(f"     ✔ APPLICATION #{self.total_applied} VERIFIED! [{resume_type.upper()} RESUME] Proof: {Path(proof_file).name}", flush=True)
             await asyncio.sleep(1.5)
             await jd_page.close()
             return True
@@ -449,8 +460,11 @@ class AutonomousNaukriAgent:
 
         if res.get("success", False):
             self.total_applied += 1
+            print(f"     ✔ APPLICATION #{self.total_applied} VERIFIED ON CAREER SITE! [{resume_type.upper()}] Proof: {Path(res.get('proof', '')).name}", flush=True)
             return True
-        return False
+        else:
+            print(f"     ❌ Application not verified/completed for {title}: {res.get('message', 'Unverified')}", flush=True)
+            return False
 
     async def solve_chatbot(self, jd_page: Page):
         """Autonomous questionnaire solver using Gemini 3.5 Flash Lite + verified resume."""
@@ -513,24 +527,39 @@ class AutonomousNaukriAgent:
             await page.goto("https://www.naukri.com/mnjuser/recommendedjobs", wait_until="domcontentloaded")
             await asyncio.sleep(2.5)
 
-            job_links = await page.locator("a.title, a[class*='title'], div.srp-jobtuple-wrapper a.title").all()
-            print(f"Found {len(job_links)} AI recommended jobs for Sachindra!", flush=True)
+            job_cards = await page.locator("div.srp-jobtuple-wrapper, div.cust-job-tuple, div[class*='jobTuple']").all()
+            if not job_cards:
+                job_cards = await page.locator("a.title, a[class*='title']").all()
+
+            print(f"Found {len(job_cards)} AI recommended jobs for Sachindra!", flush=True)
 
             applied_in_step = 0
-            for link in job_links[:12]:
+            for card in job_cards[:15]:
                 if applied_in_step >= max_jobs:
                     break
                 try:
-                    title = (await link.inner_text()).strip()
-                    href = await link.get_attribute("href")
-                    if href:
-                        is_app, match_res = matcher.is_applicable(title)
-                        if not is_app:
-                            print(f"  [Skipped Non-Applicable Role] '{title}'", flush=True)
-                            continue
-                        success = await self.apply_to_job(context, title, href, match_res=match_res)
-                        if success:
-                            applied_in_step += 1
+                    title_el = card.locator("a.title").first if await card.locator("a.title").count() > 0 else card
+                    title = (await title_el.inner_text()).strip()
+                    href = await title_el.get_attribute("href")
+                    if not href:
+                        continue
+
+                    exp_text = ""
+                    try:
+                        exp_el = card.locator("span.expwdth, span[class*='exp'], li.experience, span[title*='Yrs']").first
+                        if await exp_el.count() > 0:
+                            exp_text = (await exp_el.inner_text()).strip()
+                    except Exception:
+                        pass
+
+                    is_app, match_res = matcher.is_applicable(title, exp_text=exp_text)
+                    if not is_app:
+                        print(f"  [Skipped Role] '{title}' ({exp_text or 'No Exp Tag'}) -> {match_res.reasoning}", flush=True)
+                        continue
+
+                    success = await self.apply_to_job(context, title, href, match_res=match_res)
+                    if success:
+                        applied_in_step += 1
                 except Exception:
                     continue
         except Exception as e:
@@ -559,22 +588,34 @@ class AutonomousNaukriAgent:
                 await page.goto(url, wait_until="domcontentloaded")
                 await asyncio.sleep(2.5)
 
-                job_links = await page.locator("a.title, a[class*='title'], div.srp-jobtuple-wrapper a.title").all()
-                if not job_links:
+                job_cards = await page.locator("div.srp-jobtuple-wrapper, div.cust-job-tuple, div[class*='jobTuple']").all()
+                if not job_cards:
+                    job_cards = await page.locator("a.title, a[class*='title']").all()
+
+                if not job_cards:
                     print(f"   No more jobs found on Page {page_num}. Moving to next vector.", flush=True)
                     break
 
-                print(f"   Found {len(job_links)} job cards on Page {page_num}...", flush=True)
-                for link in job_links:
+                print(f"   Found {len(job_cards)} job cards on Page {page_num}...", flush=True)
+                for card in job_cards:
                     try:
-                        title = (await link.inner_text()).strip()
-                        href = await link.get_attribute("href")
+                        title_el = card.locator("a.title").first if await card.locator("a.title").count() > 0 else card
+                        title = (await title_el.inner_text()).strip()
+                        href = await title_el.get_attribute("href")
                         if not href:
                             continue
 
-                        is_app, match_res = matcher.is_applicable(title)
+                        exp_text = ""
+                        try:
+                            exp_el = card.locator("span.expwdth, span[class*='exp'], li.experience, span[title*='Yrs']").first
+                            if await exp_el.count() > 0:
+                                exp_text = (await exp_el.inner_text()).strip()
+                        except Exception:
+                            pass
+
+                        is_app, match_res = matcher.is_applicable(title, exp_text=exp_text)
                         if not is_app:
-                            print(f"   [Skipped Non-Applicable Role] '{title}'", flush=True)
+                            print(f"   [Skipped Role] '{title}' ({exp_text or 'No Exp Tag'}) -> {match_res.reasoning}", flush=True)
                             continue
 
                         await self.apply_to_job(context, title, href, match_res=match_res)

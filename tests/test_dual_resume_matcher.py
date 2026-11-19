@@ -3,6 +3,7 @@ from core.matcher import matcher
 from core.vault import vault
 from core.career_knowledge_base import match_field_to_value, get_career_knowledge_base
 from career_site.autofiller import CareerSiteAutofiller
+from naukri.filters import is_fresher_job
 
 
 def test_dual_resume_vault_files_exist():
@@ -42,6 +43,45 @@ def test_matcher_stack_routing():
         assert app is True, f"Failed for {r}"
         assert res.resume_type == "python", f"Expected python for {r}, got {res.resume_type}"
         assert "python" in res.resume_path.lower()
+
+
+def test_fresher_experience_gatekeeping():
+    # Acceptable fresher & junior brackets
+    assert is_fresher_job("Python Developer", "0-2 Yrs")[0] is True
+    assert is_fresher_job("Java Backend Engineer", "0-1 Yrs")[0] is True
+    assert is_fresher_job("Software Engineer", "Fresher")[0] is True
+    assert is_fresher_job("Graduate Engineer Trainee", "")[0] is True
+    assert is_fresher_job("Junior Backend Developer", "")[0] is True
+
+    # Reject senior brackets & senior titles
+    assert is_fresher_job("Senior Python Developer", "0-2 Yrs")[0] is False
+    assert is_fresher_job("Tech Lead - Java", "0-1 Yrs")[0] is False
+    assert is_fresher_job("Principal Architect", "0-1 Yrs")[0] is False
+    assert is_fresher_job("Python Developer", "3-5 Yrs")[0] is False
+    assert is_fresher_job("Java Developer", "4-7 Yrs")[0] is False
+    assert is_fresher_job("Backend Engineer", "5+ Yrs")[0] is False
+    assert is_fresher_job("Python Engineer (4+ Years)", "")[0] is False
+
+
+def test_matcher_with_experience_bracket():
+    # Junior / Fresher: Accepted
+    ok_py, res_py = matcher.is_applicable("Python Developer", exp_text="0-2 Yrs")
+    assert ok_py is True
+    assert res_py.resume_type == "python"
+
+    ok_java, res_java = matcher.is_applicable("Java Developer", exp_text="0-1 Yrs")
+    assert ok_java is True
+    assert res_java.resume_type == "java"
+
+    # Senior Experience: Rejected
+    rej_py, _ = matcher.is_applicable("Python Developer", exp_text="3-6 Yrs")
+    assert rej_py is False
+
+    rej_java, _ = matcher.is_applicable("Java Developer", exp_text="4-8 Yrs")
+    assert rej_java is False
+
+    rej_lead, _ = matcher.is_applicable("Lead Software Engineer", exp_text="0-2 Yrs")
+    assert rej_lead is False
 
 
 def test_matcher_non_applicable_filtering():

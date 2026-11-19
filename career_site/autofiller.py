@@ -27,6 +27,12 @@ class CareerSiteAutofiller:
     - SmartRecruiters, Workable, BambooHR
     - Google Forms
     - Generic HTML / React / Angular ATS Career Pages
+
+    Equipped with:
+    1. Deterministic Multi-Signal Submission Verification
+    2. Strict 75-Second Timeout Per Job (prevents infinite hangs)
+    3. Network & Dynamic SPA Event Synchronization
+    4. Dual-Resume Stack Routing (Python vs Java)
     """
 
     def __init__(self, resume_type: str = "python"):
@@ -106,19 +112,55 @@ class CareerSiteAutofiller:
     ) -> Dict[str, Any]:
         """
         Main entry point: Inspects page, detects platform, fills all fields,
-        attaches resume, submits application, and records proof.
+        attaches resume, submits application, and records verified proof.
+        Guarded by a strict 75-second timeout to prevent stalling the runner.
         """
+        try:
+            return await asyncio.wait_for(
+                self._execute_workflow(page, job_title, company, job_url),
+                timeout=75.0
+            )
+        except asyncio.TimeoutError:
+            print(f"  ⚠️ [TIMEOUT SKIPPED] Career portal for {company} took >75s. Safely aborting.", flush=True)
+            safe_company = re.sub(r'[^a-zA-Z0-9]', '_', company)[:20]
+            safe_title = re.sub(r'[^a-zA-Z0-9]', '_', job_title)[:20]
+            proof_path = str(self.proof_dir / f"TIMEOUT_{safe_company}_{safe_title}_{int(time.time())}.png")
+            try:
+                await page.screenshot(path=proof_path)
+            except Exception:
+                pass
+            return {
+                "success": False,
+                "status": "TIMEOUT",
+                "proof": proof_path,
+                "message": "Career application exceeded 75s timeout limit."
+            }
+
+    async def _execute_workflow(
+        self,
+        page: Page,
+        job_title: str,
+        company: str,
+        job_url: str = ""
+    ) -> Dict[str, Any]:
+        """Core execution workflow."""
         current_url = page.url
         print(f"\n" + "=" * 70, flush=True)
         print(f" [CAREER SITE ENGINE] Applying to: {company} - {job_title}", flush=True)
         print(f" Target URL: {current_url}", flush=True)
+        print(f" Target Stack: [{self.resume_type.upper()}]", flush=True)
         print("=" * 70, flush=True)
 
-        await self.inject_hud(page, f"Target: {company}", f"Role: {job_title[:35]} | Detecting ATS...")
-        await asyncio.sleep(2)
+        await self.inject_hud(page, f"Target: {company}", f"Role: {job_title[:30]} | Stack: {self.resume_type.upper()} | Detecting ATS...")
+        
+        # Wait for dynamic form elements to render
+        try:
+            await page.wait_for_selector("input, textarea, form, div[role='main']", state="visible", timeout=10000)
+        except Exception:
+            pass
 
         # 1. Platform Detection & Routing
-        if "greenhouse.io" in current_url or await page.locator("iframe#grnhse_iframe").count() > 0 or await page.locator("#application_form, #app_form").count() > 0 and "greenhouse" in (await page.content()).lower():
+        if "greenhouse.io" in current_url or await page.locator("iframe#grnhse_iframe").count() > 0 or (await page.locator("#application_form, #app_form").count() > 0 and "greenhouse" in (await page.content()).lower()):
             res = await self.handle_greenhouse(page, job_title, company)
         elif "lever.co" in current_url or "jobs.lever.co" in current_url:
             res = await self.handle_lever(page, job_title, company)
@@ -128,7 +170,7 @@ class CareerSiteAutofiller:
             # Generic ATS / HTML Form
             res = await self.handle_generic_form(page, job_title, company)
 
-        # 2. Database Recording & Proof
+        # 2. Database Recording & Proof (ONLY for verified submissions)
         proof_path = res.get("proof", "")
         if res.get("success", False):
             db.save_job(
@@ -136,11 +178,11 @@ class CareerSiteAutofiller:
                 company=company,
                 portal="CareerSite",
                 url=job_url or current_url,
-                match_score=0.92,
+                match_score=0.95,
                 resume_type=self.resume_type
             )
             db.update_job_status(job_url or current_url, "APPLIED", proof_path)
-            print(f" ✔ APPLICATION CONFIRMED for {company}! Proof saved: {Path(proof_path).name}", flush=True)
+            print(f" ✔ APPLICATION VERIFIED for {company}! Proof saved: {Path(proof_path).name}", flush=True)
         else:
             print(f" ⚠️ Application status for {company}: {res.get('message')}", flush=True)
 
@@ -149,7 +191,7 @@ class CareerSiteAutofiller:
     async def handle_greenhouse(self, page: Page, job_title: str, company: str) -> Dict[str, Any]:
         """Handles Greenhouse job boards and embedded Greenhouse iframes."""
         print(" -> Detected ATS: Greenhouse", flush=True)
-        await self.inject_hud(page, f"ATS: Greenhouse | {company}", "Filling Applicant Information...")
+        await self.inject_hud(page, f"ATS: Greenhouse | {company}", f"Filling Info ({self.resume_type.upper()})...")
 
         target = page
         if await page.locator("iframe#grnhse_iframe").count() > 0:
@@ -169,7 +211,7 @@ class CareerSiteAutofiller:
             if await loc.count() > 0 and await loc.is_visible():
                 await self.highlight_element(loc)
                 await loc.fill(val)
-                await asyncio.sleep(0.2)
+                await asyncio.sleep(0.15)
 
         # Social links
         for selector, val in [
@@ -181,7 +223,7 @@ class CareerSiteAutofiller:
             if await loc.count() > 0 and await loc.is_visible():
                 await self.highlight_element(loc)
                 await loc.fill(val)
-                await asyncio.sleep(0.2)
+                await asyncio.sleep(0.15)
 
         # Resume upload
         resume_file = self.get_resume_path()
@@ -197,7 +239,7 @@ class CareerSiteAutofiller:
         await self.autofill_form_elements(target, page)
 
         # Submit Application
-        await self.inject_hud(page, f"ATS: Greenhouse | {company}", "Submitting Application...")
+        await self.inject_hud(page, f"ATS: Greenhouse | {company}", "Submitting & Verifying...")
         submit_btn = target.locator("#submit_app, input[type='submit'], button[type='submit']:has-text('Submit')").first
         return await self._click_submit_and_verify(page, submit_btn, company, job_title)
 
@@ -231,23 +273,23 @@ class CareerSiteAutofiller:
             if await loc.count() > 0 and await loc.is_visible():
                 await self.highlight_element(loc)
                 await loc.fill(val)
-                await asyncio.sleep(0.2)
+                await asyncio.sleep(0.15)
 
         # Resume upload
         resume_file = self.get_resume_path()
         if resume_file and resume_file.exists():
-            await self.inject_hud(page, f"ATS: Lever | {company}", f"Attaching Resume ({resume_file.name})...")
+            await self.inject_hud(page, f"ATS: Lever | {company}", f"Attaching {self.resume_type.upper()} Resume ({resume_file.name})...")
             file_input = page.locator("input[type='file']").first
             if await file_input.count() > 0:
                 await file_input.set_input_files(str(resume_file))
-                print(f"  Attached resume: {resume_file.name}", flush=True)
+                print(f"  Attached {self.resume_type.upper()} resume: {resume_file.name}", flush=True)
                 await asyncio.sleep(1.5)
 
         # Dynamic questions & dropdowns
         await self.autofill_form_elements(page, page)
 
         # Submit
-        await self.inject_hud(page, f"ATS: Lever | {company}", "Submitting Application...")
+        await self.inject_hud(page, f"ATS: Lever | {company}", "Submitting & Verifying...")
         submit_btn = page.locator("#btn-submit, button[data-qa='btn-submit'], button:has-text('Submit Application')").first
         return await self._click_submit_and_verify(page, submit_btn, company, job_title)
 
@@ -266,7 +308,6 @@ class CareerSiteAutofiller:
 
                 ans = match_field_to_value("question", q_text, "", resume_type=self.resume_type)
                 if not ans:
-                    # Solve via LLM
                     ans = await solver.solve_question(q_text, profile=self.profile)
 
                 # Check text input
@@ -274,7 +315,7 @@ class CareerSiteAutofiller:
                 if await text_input.count() > 0 and await text_input.is_visible():
                     await self.highlight_element(text_input)
                     await text_input.fill(ans)
-                    await asyncio.sleep(0.2)
+                    await asyncio.sleep(0.15)
                     continue
 
                 # Check radio buttons
@@ -284,15 +325,10 @@ class CareerSiteAutofiller:
                         lbl = (await r.inner_text()).strip()
                         if ans.lower() in lbl.lower() or lbl.lower() in ans.lower():
                             await r.click()
-                            await asyncio.sleep(0.2)
+                            await asyncio.sleep(0.15)
                             break
             except Exception as e:
                 logger.debug(f"Google Form field error: {e}")
-
-        # Check file upload (Google Forms often requires manual sign-in to upload)
-        file_btn = page.locator("div[role='button']:has-text('Add file'), input[type='file']").first
-        if await file_btn.count() > 0:
-            print("  Note: File upload on Google Form may require Google account authentication.", flush=True)
 
         submit_btn = page.locator("div[role='button']:has-text('Submit'), span:has-text('Submit')").first
         return await self._click_submit_and_verify(page, submit_btn, company, job_title)
@@ -300,7 +336,7 @@ class CareerSiteAutofiller:
     async def handle_generic_form(self, page: Page, job_title: str, company: str) -> Dict[str, Any]:
         """Handles arbitrary company career portals, Workable, SmartRecruiters, React/Angular apps."""
         print(" -> Detected ATS: Generic HTML / React Portal", flush=True)
-        await self.inject_hud(page, f"Portal: {company}", "Scanning Form Fields & Inputs...")
+        await self.inject_hud(page, f"Portal: {company}", f"Scanning Fields ({self.resume_type.upper()})...")
 
         # First, upload resume if file input is available
         resume_file = self.get_resume_path()
@@ -309,7 +345,7 @@ class CareerSiteAutofiller:
             for fi in file_inputs:
                 try:
                     await fi.set_input_files(str(resume_file))
-                    print(f"  Attached resume to file input: {resume_file.name}", flush=True)
+                    print(f"  Attached {self.resume_type.upper()} resume to file input: {resume_file.name}", flush=True)
                     await asyncio.sleep(1.5)
                     break
                 except Exception:
@@ -332,7 +368,7 @@ class CareerSiteAutofiller:
                 await self.autofill_form_elements(page, page)
 
         # Submit Application
-        await self.inject_hud(page, f"Portal: {company}", "Submitting Application...")
+        await self.inject_hud(page, f"Portal: {company}", "Submitting & Verifying Application...")
         submit_btn = page.locator(
             "button[type='submit'], input[type='submit'], button:has-text('Submit Application'), button:has-text('Submit'), button:has-text('Send Application'), button:has-text('Apply Now')"
         ).first
@@ -342,6 +378,7 @@ class CareerSiteAutofiller:
         """
         Extracts semantic context for every visible input, textarea, select, and radio,
         and fills with verified candidate data without hallucination.
+        Fires native DOM events for seamless React / Angular / Vue state binding.
         """
         # 1. TEXT INPUTS
         inputs = await target.locator(
@@ -370,8 +407,13 @@ class CareerSiteAutofiller:
                 if matched_val:
                     await self.highlight_element(inp, "#10b981")
                     await inp.fill(str(matched_val))
+                    # Trigger native input events for React/Angular bindings
+                    try:
+                        await inp.evaluate("(el) => { el.dispatchEvent(new Event('input', { bubbles: true })); el.dispatchEvent(new Event('change', { bubbles: true })); }")
+                    except Exception:
+                        pass
                     print(f"    [Field Filled] '{ctx[:30]}...' -> {str(matched_val)[:25]}", flush=True)
-                    await asyncio.sleep(0.15)
+                    await asyncio.sleep(0.1)
             except Exception as e:
                 logger.debug(f"Error filling text input: {e}")
 
@@ -394,8 +436,12 @@ class CareerSiteAutofiller:
                 if matched_val:
                     await self.highlight_element(ta, "#10b981")
                     await ta.fill(str(matched_val))
+                    try:
+                        await ta.evaluate("(el) => { el.dispatchEvent(new Event('input', { bubbles: true })); el.dispatchEvent(new Event('change', { bubbles: true })); }")
+                    except Exception:
+                        pass
                     print(f"    [Textarea Filled] '{ctx[:30]}...' -> {str(matched_val)[:30]}...", flush=True)
-                    await asyncio.sleep(0.2)
+                    await asyncio.sleep(0.15)
             except Exception as e:
                 logger.debug(f"Error filling textarea: {e}")
 
@@ -408,7 +454,7 @@ class CareerSiteAutofiller:
 
                 ctx = await self._get_element_context(sel)
                 await self._handle_select_dropdown(sel, ctx)
-                await asyncio.sleep(0.15)
+                await asyncio.sleep(0.1)
             except Exception as e:
                 logger.debug(f"Error handling select: {e}")
 
@@ -489,7 +535,7 @@ class CareerSiteAutofiller:
                     print(f"    [Select Chosen] '{ctx[:25]}' -> {opt}", flush=True)
                     return
 
-        # Fallback to LLM / Matcher
+        # Fallback to LLM
         best = await solver.solve_question(ctx, options=opt_texts, profile=self.profile)
         if best:
             for opt in opt_texts:
@@ -545,7 +591,14 @@ class CareerSiteAutofiller:
         company: str,
         job_title: str
     ) -> Dict[str, Any]:
-        """Highlights and clicks the submit button, then monitors for confirmation or manual pause."""
+        """
+        Clicks Submit and executes deterministic multi-signal verification:
+        1. Checks for CAPTCHA
+        2. Clicks Submit
+        3. Actively polls for confirmation signals (URL change, confirmation banner, form dismissal)
+        4. Detects validation errors that blocked submission
+        5. Does NOT mark as applied unless verified!
+        """
         safe_company = re.sub(r'[^a-zA-Z0-9]', '_', company)[:20]
         safe_title = re.sub(r'[^a-zA-Z0-9]', '_', job_title)[:20]
         timestamp = int(time.time())
@@ -563,49 +616,98 @@ class CareerSiteAutofiller:
         # Check for CAPTCHA before submitting
         captcha_el = page.locator("iframe[src*='recaptcha'], iframe[src*='hcaptcha'], div.cf-turnstile, div[class*='captcha']").first
         if await captcha_el.count() > 0 and await captcha_el.is_visible():
-            print("  ⚠️ Anti-Bot / CAPTCHA detected on career page! Requesting manual solve on visible screen...", flush=True)
-            await self.inject_hud(page, "⚠️ CAPTCHA Detected!", "Please solve the captcha on screen. Agent waiting 30s...")
-            # Wait up to 30s for user or automated pass
-            for _ in range(15):
+            print("  ⚠️ Anti-Bot / CAPTCHA detected on career page! Waiting up to 25s for resolution...", flush=True)
+            await self.inject_hud(page, "⚠️ CAPTCHA Detected!", "Please solve the captcha on screen. Waiting 25s...")
+            for _ in range(12):
                 await asyncio.sleep(2)
                 if not await captcha_el.is_visible():
                     break
 
         await self.highlight_element(submit_btn, "#06b6d4")
         print("  Clicking Submit Application button...", flush=True)
-        await asyncio.sleep(1)
+        initial_url = page.url
 
         try:
             await submit_btn.click()
-        except Exception as e:
+        except Exception:
             try:
                 await submit_btn.click(force=True)
             except Exception as ex:
                 logger.error(f"Failed clicking submit: {ex}")
 
-        # Wait for submission confirmation or URL change
-        await asyncio.sleep(3)
+        # Active Submission Verification Loop (up to 25 seconds)
+        confirmed = False
+        error_msg = ""
+
+        print("  Verifying application submission with live server...", flush=True)
+        for elapsed in range(1, 26):
+            await asyncio.sleep(1)
+
+            # Check 1: URL change away from form to confirmation page
+            cur_url = page.url.lower()
+            if cur_url != initial_url.lower() and any(kw in cur_url for kw in ["confirm", "thank", "success", "submitted", "done", "complete", "applied", "status"]):
+                confirmed = True
+                print(f"  ✔ Confirmation Signal 1: Redirected to confirmed URL ({cur_url})", flush=True)
+                break
+
+            # Check 2: DOM confirmation messages or banners
+            try:
+                page_text = (await page.content()).lower()
+                confirmation_keywords = [
+                    "thank you for applying", "application submitted", "successfully submitted",
+                    "we have received your application", "application received", "thanks for applying",
+                    "submission confirmed", "your application has been sent", "application has been submitted",
+                    "we've received your application", "thank you for your interest"
+                ]
+                if any(kw in page_text for kw in confirmation_keywords):
+                    confirmed = True
+                    print(f"  ✔ Confirmation Signal 2: Confirmation banner verified in DOM", flush=True)
+                    break
+            except Exception:
+                pass
+
+            # Check 3: Check for form validation errors that blocked submission
+            try:
+                error_loc = page.locator("div.error, span.error, [class*='error-message'], .has-error, [aria-invalid='true'], div.field-validation-error, div.alert-danger").first
+                if await error_loc.count() > 0 and await error_loc.is_visible():
+                    err_text = (await error_loc.inner_text()).strip()
+                    if err_text and ("require" in err_text.lower() or "invalid" in err_text.lower() or "error" in err_text.lower()):
+                        error_msg = f"Form validation error: {err_text}"
+                        print(f"  ⚠️ Submission blocked by validation error: {err_text}", flush=True)
+                        break
+            except Exception:
+                pass
+
+            # Check 4: Check if form disappeared after submit
+            if elapsed >= 6:
+                try:
+                    remaining_inputs = await page.locator("input:not([type='hidden']), textarea").all()
+                    visible_inputs = [i for i in remaining_inputs if await i.is_visible()]
+                    if len(visible_inputs) == 0:
+                        confirmed = True
+                        print(f"  ✔ Confirmation Signal 3: Form inputs cleared and dismissed", flush=True)
+                        break
+                except Exception:
+                    pass
+
+            if elapsed % 5 == 0:
+                await self.inject_hud(page, f"Verifying Submission ({company})...", f"Checking server response ({elapsed}s/25s)")
+
         await page.screenshot(path=proof_path)
 
-        # Check for positive confirmation signals
-        page_text = (await page.content()).lower()
-        confirmation_keywords = [
-            "thank you", "application submitted", "successfully submitted", "application received",
-            "we have received your application", "thanks for applying", "submission confirmed"
-        ]
-
-        if any(k in page_text for k in confirmation_keywords):
-            await self.inject_hud(page, "✔ APPLICATION SUCCESSFUL!", "Confirmation verified and recorded.")
+        if confirmed:
+            await self.inject_hud(page, "✔ APPLICATION VERIFIED!", "Submission confirmed and proof saved.")
             return {
                 "success": True,
-                "status": "APPLIED",
+                "status": "VERIFIED_APPLIED",
                 "proof": proof_path,
-                "message": "Application submitted successfully."
+                "message": "Application submitted and verified successfully."
             }
 
+        await self.inject_hud(page, "⚠️ SUBMISSION UNVERIFIED", error_msg or "Server confirmation not detected.")
         return {
-            "success": True,
-            "status": "APPLIED",
+            "success": False,
+            "status": "VALIDATION_FAILED" if error_msg else "UNVERIFIED",
             "proof": proof_path,
-            "message": "Submit button clicked. Form submitted."
+            "message": error_msg or "Form submitted but server confirmation could not be verified within 25s."
         }

@@ -92,7 +92,7 @@ class JobMatcher:
             reasoning=reasoning
         )
 
-    def is_applicable(self, title: str, description: str = "") -> Tuple[bool, MatchResult]:
+    def is_applicable(self, title: str, description: str = "", exp_text: str = "") -> Tuple[bool, MatchResult]:
         """
         Evaluates whether a role aligns with Sachindra's verified qualifications.
         Returns: (is_applicable: bool, match_result: MatchResult).
@@ -100,19 +100,25 @@ class JobMatcher:
         title_lower = title.lower()
         match_res = self.match(title, description)
 
-        # 1. Seniority Check
+        # 1. Fresher / Seniority Check (Candidate is 2026 Batch Fresher)
+        from naukri.filters import is_fresher_job, is_valid_software_role
+        is_fresh, reason = is_fresher_job(title, exp_text)
+        if not is_fresh:
+            match_res.reasoning = f"Filtered Out: {reason}"
+            return False, match_res
+
+        # 2. Seniority Check fallback
         if any(term in title_lower for term in self.SENIOR_DISQUALIFIERS):
             return False, match_res
 
-        # 2. Conflicting Tech Stacks Check (if title is specifically for another language/stack)
+        # 3. Conflicting Tech Stacks Check (if title is specifically for another language/stack)
         for stack in self.CONFLICTING_STACKS:
             if re.search(rf"\b{re.escape(stack)}\b", title_lower):
                 # Only reject if neither Python nor Java is mentioned in the title
                 if not any(k in title_lower for k in ["python", "java", "spring"]):
                     return False, match_res
 
-        # 3. Basic Software Validation
-        from naukri.filters import is_valid_software_role
+        # 4. Basic Software Validation
         if not is_valid_software_role(title):
             return False, match_res
 
