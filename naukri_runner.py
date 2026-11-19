@@ -98,7 +98,17 @@ async def run_naukri_flow():
             if "ProcessSingleton" in str(e) or "Lock" in str(e):
                 print("Detected stale Chrome process locking profile. Cleaning up...", flush=True)
                 import subprocess
-                subprocess.run(["taskkill", "/F", "/IM", "chrome.exe"], capture_output=True)
+                subprocess.run([
+                    "powershell", "-NoProfile", "-Command",
+                    "Get-CimInstance Win32_Process -Filter \"Name = 'chrome.exe'\" | Where-Object { $_.CommandLine -like '*nirantar*' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }"
+                ], capture_output=True)
+                for stale_lock in ["SingletonLock", "SingletonCookie", "SingletonSocket"]:
+                    lock_p = profile_dir / stale_lock
+                    if lock_p.exists():
+                        try:
+                            lock_p.unlink()
+                        except Exception:
+                            pass
                 await asyncio.sleep(2)
                 context = await p.chromium.launch_persistent_context(**launch_kwargs)
             else:
