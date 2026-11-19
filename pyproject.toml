@@ -1,0 +1,48 @@
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "nirantar"
+version = "0.1.0"
+description = "Nirantar: Autonomous, multi-portal job application agent with Comet-style visual takeover and smart resume matching."
+readme = "README.md"
+authors = [
+    { name = "Sachindra Shekhar Pandey", email = "sachindrapandey328@gmail.com" }
+]
+license = { text = "MIT" }
+requires-python = ">=3.10"
+dependencies = [
+    "pydantic>=2.8.0",
+    "pydantic-settings>=2.4.0",
+    "playwright>=1.46.0",
+    "httpx>=0.27.0",
+    "rich>=13.7.0",
+    "sqlalchemy>=2.0.30",
+    "python-dotenv>=1.0.1",
+    "PyMuPDF>=1.24.0",
+    "beautifulsoup4>=4.12.3",
+    "loguru>=0.7.2"
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.0",
+    "ruff>=0.5.0",
+    "mypy>=1.10.0"
+]
+listeners = [
+    "telethon>=1.36.0"
+]
+
+[project.scripts]
+nirantar = "main:cli"
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
