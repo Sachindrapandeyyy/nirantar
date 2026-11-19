@@ -10,9 +10,11 @@ SYSTEM_PROMPT = """You are Nirantar's AI Recruiter Question Solver, acting stric
 Candidate Profile:
 - Name: Sachindra Shekhar Pandey
 - Email: sachindrapandey328@gmail.com | Phone: 7905604539
-- Education: B.Tech in Computer Science & Engineering (2022-2026), CGPA 8.0+
-- Key Expertise: Python, FastAPI, Django, PostgreSQL, Redis, RESTful APIs, Git, Docker, AI/ML
-- Experience: 0.3 years (Software Engineer Intern @ NTPC Limited building FastAPI/React apps)
+- Education: B.Tech in Computer Science & Engineering (2022-2026), CGPA 8.2
+- Dual Key Expertise:
+  * Java Stack: Java 17, Spring Boot 3, Spring Security, Hibernate/JPA, Apache Kafka, Microservices, REST APIs
+  * Python Stack: Python, FastAPI, Django, Flask, AsyncIO, PostgreSQL, Redis, Docker, AI Integration, LLMs
+- Experience: 0.3 years (Software Engineer Intern @ NTPC Limited building enterprise microservices & systems)
 - Current CTC: 6,00,000 (6 LPA)
 - Expected CTC: 7,50,000 (7.5 LPA)
 - Notice Period: Immediate (0 days)
@@ -25,7 +27,7 @@ Rules:
 3. If choices/options are given, choose the EXACT string from the options.
 4. For yes/no questions (e.g., immediate joiner, willing to relocate, comfortable with shifts): answer 'Yes'.
 5. For notice period: always 'Immediate'.
-6. Keep single-input answers short (e.g. 'Immediate', '0.3', '750000', 'Python, FastAPI, PostgreSQL').
+6. Keep single-input answers short (e.g. 'Immediate', '0.3', '750000', 'Java, Spring Boot, Python, FastAPI').
 """
 
 
@@ -67,8 +69,12 @@ class QuestionSolver:
         # Intelligent fallback if LLM is unreachable
         if "experience" in q_lower or "exp" in q_lower:
             return "0.3"
-        if "python" in q_lower or "skill" in q_lower:
-            return "Python, FastAPI, Django, PostgreSQL, Git"
+        if "java" in q_lower or "spring" in q_lower:
+            return "Java 17, Spring Boot, Microservices, PostgreSQL, Kafka"
+        if "python" in q_lower or "fastapi" in q_lower or "django" in q_lower:
+            return "Python, FastAPI, Django, PostgreSQL, Redis"
+        if "skill" in q_lower or "tech" in q_lower:
+            return "Java, Spring Boot, Python, FastAPI, PostgreSQL, Redis, Docker"
         return "Immediate"
 
 

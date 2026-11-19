@@ -8,14 +8,15 @@ class JobMatcher:
     """
     Intelligently inspects Job Descriptions to:
     1. Select the optimal resume (Java vs Python)
-    2. Score the compatibility
-    3. Strictly uphold the 'Apply Anyway' CTC policy (never drop a job based on posted salary)
+    2. Score the compatibility against Sachindra's verified dual stack
+    3. Determine role applicability (filters out unrelated tech stacks & senior roles)
+    4. Strictly uphold the 'Apply Anyway' CTC policy
     """
 
     JAVA_KEYWORDS = {
         "java", "spring", "spring boot", "springboot", "microservices", "hibernate",
         "jpa", "kafka", "jvm", "kotlin", "maven", "gradle", "postgresql", "redis",
-        "restful", "rest api", "junit", "mockito", "multithreading"
+        "restful", "rest api", "junit", "mockito", "multithreading", "j2ee"
     }
 
     PYTHON_KEYWORDS = {
@@ -24,36 +25,62 @@ class JobMatcher:
         "langchain", "ollama", "nlp", "computer vision", "opencv"
     }
 
+    CONFLICTING_STACKS = {
+        "php", "laravel", "wordpress", "ruby", "rails", "golang", "go developer",
+        "c#", ".net", "dotnet", "asp.net", "salesforce", "sap", "abap",
+        "flutter", "react native", "swift", "ios developer", "objective-c",
+        "cobol", "rust developer"
+    }
+
+    SENIOR_DISQUALIFIERS = {
+        "principal", "director", "architect", "engineering manager",
+        "tech lead", "team lead", "vp of", "head of", "sr. manager"
+    }
+
     def match(self, title: str, description: str = "") -> MatchResult:
         content = f"{title.lower()} {description.lower()}"
-        
+        title_lower = title.lower()
+
         java_hits = [kw for kw in self.JAVA_KEYWORDS if re.search(rf"\b{re.escape(kw)}\b", content)]
         python_hits = [kw for kw in self.PYTHON_KEYWORDS if re.search(rf"\b{re.escape(kw)}\b", content)]
 
-        # Scoring
         java_score = len(java_hits)
         python_score = len(python_hits)
 
-        # Title gets heavy weighting
-        title_lower = title.lower()
-        if "java" in title_lower or "spring" in title_lower:
-            java_score += 10
-        elif "python" in title_lower or "ai" in title_lower or "fastapi" in title_lower:
-            python_score += 10
+        # Title keyword boosting
+        if any(k in title_lower for k in ["java", "spring", "springboot", "j2ee"]):
+            java_score += 12
+        if any(k in title_lower for k in ["python", "fastapi", "django", "flask", "ai"]):
+            python_score += 12
 
-        # Choose best resume
-        if python_score > java_score:
-            selected_type = "python"
-            matched_kw = python_hits
-            total_hits = python_score
-            reasoning = f"Matched {len(python_hits)} Python/AI keywords (e.g., {', '.join(python_hits[:4])})"
-        else:
+        # Decision logic
+        if java_score > python_score and java_score > 0:
             selected_type = "java"
             matched_kw = java_hits
             total_hits = java_score
-            reasoning = f"Matched {len(java_hits)} Java/Spring keywords (e.g., {', '.join(java_hits[:4])})"
+            reasoning = f"Matched Java/Spring stack ({len(java_hits)} keywords: {', '.join(java_hits[:4]) if java_hits else 'Java Title'})"
+        elif python_score > java_score and python_score > 0:
+            selected_type = "python"
+            matched_kw = python_hits
+            total_hits = python_score
+            reasoning = f"Matched Python/AI stack ({len(python_hits)} keywords: {', '.join(python_hits[:4]) if python_hits else 'Python Title'})"
+        elif "java" in title_lower:
+            selected_type = "java"
+            matched_kw = ["java"]
+            total_hits = 10
+            reasoning = "Targeted Java Engineering Role"
+        elif "python" in title_lower:
+            selected_type = "python"
+            matched_kw = ["python"]
+            total_hits = 10
+            reasoning = "Targeted Python Engineering Role"
+        else:
+            # Generic Backend / SDE role
+            selected_type = "python"
+            matched_kw = python_hits or java_hits or ["backend"]
+            total_hits = max(python_score, java_score, 2)
+            reasoning = "General Backend / SDE Role (Routed to Python Resume)"
 
-        # Normalized compatibility score (0.0 to 1.0)
         norm_score = min(1.0, max(0.4, total_hits / 8.0))
         resume_path = vault.get_resume(selected_type)
 
@@ -64,6 +91,32 @@ class JobMatcher:
             matched_keywords=matched_kw,
             reasoning=reasoning
         )
+
+    def is_applicable(self, title: str, description: str = "") -> Tuple[bool, MatchResult]:
+        """
+        Evaluates whether a role aligns with Sachindra's verified qualifications.
+        Returns: (is_applicable: bool, match_result: MatchResult).
+        """
+        title_lower = title.lower()
+        match_res = self.match(title, description)
+
+        # 1. Seniority Check
+        if any(term in title_lower for term in self.SENIOR_DISQUALIFIERS):
+            return False, match_res
+
+        # 2. Conflicting Tech Stacks Check (if title is specifically for another language/stack)
+        for stack in self.CONFLICTING_STACKS:
+            if re.search(rf"\b{re.escape(stack)}\b", title_lower):
+                # Only reject if neither Python nor Java is mentioned in the title
+                if not any(k in title_lower for k in ["python", "java", "spring"]):
+                    return False, match_res
+
+        # 3. Basic Software Validation
+        from naukri.filters import is_valid_software_role
+        if not is_valid_software_role(title):
+            return False, match_res
+
+        return True, match_res
 
 
 matcher = JobMatcher()

@@ -27,6 +27,7 @@ from career_site.autofiller import CareerSiteAutofiller
 matcher = JobMatcher()
 
 SEARCH_VECTORS = [
+    # --- Python Engineering Stack ---
     {
         "name": "Python Developer (Noida)",
         "base_url": "https://www.naukri.com/python-developer-jobs-in-noida?experience=0&jobAge=15"
@@ -34,10 +35,6 @@ SEARCH_VECTORS = [
     {
         "name": "Python Developer (Delhi NCR)",
         "base_url": "https://www.naukri.com/python-developer-jobs-in-delhi-ncr?experience=0&jobAge=15"
-    },
-    {
-        "name": "Backend Developer (Noida)",
-        "base_url": "https://www.naukri.com/backend-developer-jobs-in-noida?experience=0&jobAge=15"
     },
     {
         "name": "Python Developer (Gurgaon)",
@@ -50,6 +47,34 @@ SEARCH_VECTORS = [
     {
         "name": "Python Fresher Jobs (All India)",
         "base_url": "https://www.naukri.com/python-fresher-jobs?experience=0&jobAge=15"
+    },
+
+    # --- Java Engineering Stack ---
+    {
+        "name": "Java Developer (Noida)",
+        "base_url": "https://www.naukri.com/java-developer-jobs-in-noida?experience=0&jobAge=15"
+    },
+    {
+        "name": "Java Developer (Delhi NCR)",
+        "base_url": "https://www.naukri.com/java-developer-jobs-in-delhi-ncr?experience=0&jobAge=15"
+    },
+    {
+        "name": "Java Developer (Gurgaon)",
+        "base_url": "https://www.naukri.com/java-developer-jobs-in-gurgaon?experience=0&jobAge=15"
+    },
+    {
+        "name": "Spring Boot Developer Roles",
+        "base_url": "https://www.naukri.com/spring-boot-jobs?experience=0&jobAge=15"
+    },
+    {
+        "name": "Java Fresher Jobs (All India)",
+        "base_url": "https://www.naukri.com/java-fresher-jobs?experience=0&jobAge=15"
+    },
+
+    # --- General Backend & SDE Freshers ---
+    {
+        "name": "Backend Developer (Noida)",
+        "base_url": "https://www.naukri.com/backend-developer-jobs-in-noida?experience=0&jobAge=15"
     },
     {
         "name": "Software Engineer Freshers (Noida)",
@@ -232,20 +257,28 @@ class AutonomousNaukriAgent:
         except Exception as e:
             print(f"Recruiter Radar Note: {e}", flush=True)
 
-    async def apply_to_job(self, context: BrowserContext, title: str, href: str) -> bool:
+    async def apply_to_job(self, context: BrowserContext, title: str, href: str, match_res: Optional[Any] = None) -> bool:
         """
         Applies to a job either via:
         1. External Career Site (Greenhouse, Lever, Workday, Google Forms, Custom ATS)
         2. Naukri 1-Click apply + LLM questionnaire review
+        Dynamically matches candidate's Java vs Python resume.
         """
         if db.is_already_applied(href):
             print(f"  [Skipped Already Applied] {title}", flush=True)
             return False
 
+        if match_res is None:
+            match_res = matcher.match(title)
+
+        resume_type = match_res.resume_type
+        score = match_res.score
+        reasoning = match_res.reasoning
+
         jd_page = await context.new_page()
         try:
             await jd_page.goto(href, wait_until="domcontentloaded")
-            await self.inject_hud(jd_page, f"Inspecting: {title[:40]}", "Resume: Python | LLM Ready")
+            await self.inject_hud(jd_page, f"Target: {title[:35]}", f"Auto-Selected: {resume_type.upper()} Resume | {reasoning[:35]}")
             await asyncio.sleep(1.8)
 
             apply_btn = jd_page.locator("button.apply-button, button:has-text('Apply on company site'), button:has-text('Apply on website'), button:has-text('Apply')").first
@@ -258,7 +291,7 @@ class AutonomousNaukriAgent:
 
             # Case 1: Explicit External Career Site
             if "company site" in btn_text.lower() or "website" in btn_text.lower() or "career site" in btn_text.lower():
-                return await self.apply_on_external_career_site(context, jd_page, title, href, apply_btn)
+                return await self.apply_on_external_career_site(context, jd_page, title, href, apply_btn=apply_btn, resume_type=resume_type)
 
             # Case 2: Standard Apply button - check if it opens external site or 1-click
             try:
@@ -267,8 +300,9 @@ class AutonomousNaukriAgent:
                 pass
 
             print(f"\n---> Applying to: {title}", flush=True)
+            print(f"     Target Stack: [{resume_type.upper()}] | Score: {score} ({reasoning})", flush=True)
             print(f"     Clicking Apply button...", flush=True)
-            await self.inject_hud(jd_page, "Clicking Apply...", "Checking 1-Click / External Portal...")
+            await self.inject_hud(jd_page, "Clicking Apply...", f"Checking 1-Click / External Portal [{resume_type.upper()}]...")
 
             # Check if clicking spawns a new tab (external career redirect)
             career_page = None
@@ -280,7 +314,7 @@ class AutonomousNaukriAgent:
                 pass
 
             if career_page and "naukri.com" not in career_page.url:
-                return await self.apply_on_external_career_site(context, jd_page, title, href, existing_career_page=career_page)
+                return await self.apply_on_external_career_site(context, jd_page, title, href, existing_career_page=career_page, resume_type=resume_type)
 
             await asyncio.sleep(1.5)
 
@@ -310,11 +344,11 @@ class AutonomousNaukriAgent:
                 company="Naukri Recruiter",
                 portal="Naukri_Autonomous",
                 url=href,
-                match_score=0.95,
-                resume_type="python"
+                match_score=score,
+                resume_type=resume_type
             )
             db.update_job_status(href, "APPLIED", proof_file)
-            print(f"     ✔ APPLICATION #{self.total_applied} SUBMITTED! Proof: {Path(proof_file).name}", flush=True)
+            print(f"     ✔ APPLICATION #{self.total_applied} SUBMITTED! [{resume_type.upper()} RESUME] Proof: {Path(proof_file).name}", flush=True)
             await asyncio.sleep(1.5)
             await jd_page.close()
             return True
@@ -334,11 +368,13 @@ class AutonomousNaukriAgent:
         title: str,
         href: str,
         apply_btn: Optional[Any] = None,
-        existing_career_page: Optional[Page] = None
+        existing_career_page: Optional[Page] = None,
+        resume_type: str = "python"
     ) -> bool:
         """Handles applying on external company career sites autonomously."""
         print(f"\n---> [External Career Site Detected] {title}", flush=True)
-        await self.inject_hud(jd_page, f"External Career Site: {title[:35]}", "Launching Company Portal...")
+        print(f"     Routing to {resume_type.upper()} Resume Vault...", flush=True)
+        await self.inject_hud(jd_page, f"External Career Site: {title[:35]}", f"Launching Company Portal | {resume_type.upper()} Stack...")
 
         # Extract company name
         company_name = "Company"
@@ -392,7 +428,7 @@ class AutonomousNaukriAgent:
         except Exception:
             pass
 
-        autofiller = CareerSiteAutofiller(resume_type="python")
+        autofiller = CareerSiteAutofiller(resume_type=resume_type)
         res = await autofiller.apply_on_career_site(
             page=career_page,
             job_title=title,
@@ -487,8 +523,12 @@ class AutonomousNaukriAgent:
                 try:
                     title = (await link.inner_text()).strip()
                     href = await link.get_attribute("href")
-                    if href and self.is_valid_software_role(title):
-                        success = await self.apply_to_job(context, title, href)
+                    if href:
+                        is_app, match_res = matcher.is_applicable(title)
+                        if not is_app:
+                            print(f"  [Skipped Non-Applicable Role] '{title}'", flush=True)
+                            continue
+                        success = await self.apply_to_job(context, title, href, match_res=match_res)
                         if success:
                             applied_in_step += 1
                 except Exception:
@@ -532,10 +572,12 @@ class AutonomousNaukriAgent:
                         if not href:
                             continue
 
-                        if not self.is_valid_software_role(title):
+                        is_app, match_res = matcher.is_applicable(title)
+                        if not is_app:
+                            print(f"   [Skipped Non-Applicable Role] '{title}'", flush=True)
                             continue
 
-                        await self.apply_to_job(context, title, href)
+                        await self.apply_to_job(context, title, href, match_res=match_res)
                     except Exception:
                         continue
             except Exception as e:

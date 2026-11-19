@@ -14,7 +14,7 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from core.vault import vault
 from tracker.database import db
-from core.career_knowledge_base import CAREER_KNOWLEDGE_BASE, match_field_to_value
+from core.career_knowledge_base import get_career_knowledge_base, match_field_to_value
 from brain.question_solver import solver
 
 
@@ -30,10 +30,11 @@ class CareerSiteAutofiller:
     """
 
     def __init__(self, resume_type: str = "python"):
-        self.resume_type = resume_type
+        self.resume_type = str(resume_type).lower()
         self.proof_dir = PROJECT_ROOT / "proofs" / "career_sites"
         self.proof_dir.mkdir(parents=True, exist_ok=True)
         self.profile = vault.get_profile()
+        self.kb = get_career_knowledge_base(self.resume_type)
 
     async def inject_hud(self, page: Page, title: str, subtitle: str = ""):
         """Injects a visible HUD status banner at the top of the browser page."""
@@ -156,11 +157,11 @@ class CareerSiteAutofiller:
 
         # Fill identity
         field_mappings = [
-            ("#first_name", CAREER_KNOWLEDGE_BASE["first_name"]),
-            ("#last_name", CAREER_KNOWLEDGE_BASE["last_name"]),
-            ("#email", CAREER_KNOWLEDGE_BASE["email"]),
-            ("#phone", CAREER_KNOWLEDGE_BASE["phone"]),
-            ("#job_application_location", f"{CAREER_KNOWLEDGE_BASE['city']}, {CAREER_KNOWLEDGE_BASE['country']}"),
+            ("#first_name", self.kb["first_name"]),
+            ("#last_name", self.kb["last_name"]),
+            ("#email", self.kb["email"]),
+            ("#phone", self.kb["phone"]),
+            ("#job_application_location", f"{self.kb['city']}, {self.kb['country']}"),
         ]
 
         for selector, val in field_mappings:
@@ -172,9 +173,9 @@ class CareerSiteAutofiller:
 
         # Social links
         for selector, val in [
-            ("input[id*='linkedin'], input[name*='linkedin']", CAREER_KNOWLEDGE_BASE["linkedin"]),
-            ("input[id*='github'], input[name*='github']", CAREER_KNOWLEDGE_BASE["github"]),
-            ("input[id*='website'], input[name*='website'], input[id*='portfolio']", CAREER_KNOWLEDGE_BASE["portfolio"]),
+            ("input[id*='linkedin'], input[name*='linkedin']", self.kb["linkedin"]),
+            ("input[id*='github'], input[name*='github']", self.kb["github"]),
+            ("input[id*='website'], input[name*='website'], input[id*='portfolio']", self.kb["portfolio"]),
         ]:
             loc = target.locator(selector).first
             if await loc.count() > 0 and await loc.is_visible():
@@ -185,11 +186,11 @@ class CareerSiteAutofiller:
         # Resume upload
         resume_file = self.get_resume_path()
         if resume_file and resume_file.exists():
-            await self.inject_hud(page, f"ATS: Greenhouse | {company}", f"Attaching Resume ({resume_file.name})...")
+            await self.inject_hud(page, f"ATS: Greenhouse | {company}", f"Attaching {self.resume_type.upper()} Resume ({resume_file.name})...")
             file_input = target.locator("input[type='file']").first
             if await file_input.count() > 0:
                 await file_input.set_input_files(str(resume_file))
-                print(f"  Attached resume: {resume_file.name}", flush=True)
+                print(f"  Attached {self.resume_type.upper()} resume: {resume_file.name}", flush=True)
                 await asyncio.sleep(1.5)
 
         # Dynamic questions & dropdowns
@@ -212,17 +213,17 @@ class CareerSiteAutofiller:
                 await apply_btn.click()
                 await asyncio.sleep(2)
 
-        await self.inject_hud(page, f"ATS: Lever | {company}", "Filling Application Details...")
+        await self.inject_hud(page, f"ATS: Lever | {company}", f"Filling Application Details ({self.resume_type.upper()})...")
 
         # Personal details
         field_mappings = [
-            ("input[name='name']", CAREER_KNOWLEDGE_BASE["full_name"]),
-            ("input[name='email']", CAREER_KNOWLEDGE_BASE["email"]),
-            ("input[name='phone']", CAREER_KNOWLEDGE_BASE["phone"]),
-            ("input[name='org']", CAREER_KNOWLEDGE_BASE["current_company"]),
-            ("input[name='urls[LinkedIn]']", CAREER_KNOWLEDGE_BASE["linkedin"]),
-            ("input[name='urls[GitHub]']", CAREER_KNOWLEDGE_BASE["github"]),
-            ("input[name='urls[Portfolio]']", CAREER_KNOWLEDGE_BASE["portfolio"]),
+            ("input[name='name']", self.kb["full_name"]),
+            ("input[name='email']", self.kb["email"]),
+            ("input[name='phone']", self.kb["phone"]),
+            ("input[name='org']", self.kb["current_company"]),
+            ("input[name='urls[LinkedIn]']", self.kb["linkedin"]),
+            ("input[name='urls[GitHub]']", self.kb["github"]),
+            ("input[name='urls[Portfolio]']", self.kb["portfolio"]),
         ]
 
         for selector, val in field_mappings:
@@ -263,7 +264,7 @@ class CareerSiteAutofiller:
                 title_el = container.locator("div[role='heading'], span[class*='heading']").first
                 q_text = (await title_el.inner_text()).strip() if await title_el.count() > 0 else ""
 
-                ans = match_field_to_value("question", q_text, "")
+                ans = match_field_to_value("question", q_text, "", resume_type=self.resume_type)
                 if not ans:
                     # Solve via LLM
                     ans = await solver.solve_question(q_text, profile=self.profile)
@@ -358,7 +359,7 @@ class CareerSiteAutofiller:
                     continue
 
                 ctx = await self._get_element_context(inp)
-                matched_val = match_field_to_value(ctx)
+                matched_val = match_field_to_value(ctx, resume_type=self.resume_type)
 
                 if not matched_val:
                     # Check if required
@@ -386,7 +387,7 @@ class CareerSiteAutofiller:
                     continue
 
                 ctx = await self._get_element_context(ta)
-                matched_val = match_field_to_value(ctx)
+                matched_val = match_field_to_value(ctx, resume_type=self.resume_type)
                 if not matched_val:
                     matched_val = await solver.solve_question(ctx, profile=self.profile)
 
