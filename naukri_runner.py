@@ -24,20 +24,41 @@ async def run_naukri_flow():
     print("=" * 60)
     print("Opening Real Google Chrome on your screen...")
 
+    # Clear any stale locks
+    for stale_lock in ["SingletonLock", "SingletonCookie", "SingletonSocket"]:
+        lock_p = profile_dir / stale_lock
+        if lock_p.exists():
+            try:
+                lock_p.unlink()
+            except Exception:
+                pass
+
     async with async_playwright() as p:
-        # Launch REAL Chrome on screen in visible (headed) mode with slow-mo so user sees everything!
-        context = await p.chromium.launch_persistent_context(
-            user_data_dir=str(profile_dir),
-            channel="chrome",
-            headless=False,
-            slow_mo=400,  # 400ms delay between actions so user can see every click and typing!
-            args=[
+        # Launch REAL Chrome on screen in visible (headed) mode
+        launch_kwargs = {
+            "user_data_dir": str(profile_dir),
+            "channel": "chrome",
+            "headless": False,
+            "slow_mo": 350,
+            "args": [
                 "--start-maximized",
                 "--disable-blink-features=AutomationControlled",
                 "--no-sandbox"
             ],
-            viewport=None  # Maximize to full screen
-        )
+            "viewport": None
+        }
+
+        try:
+            context = await p.chromium.launch_persistent_context(**launch_kwargs)
+        except Exception as e:
+            if "ProcessSingleton" in str(e) or "Lock" in str(e):
+                print("Detected stale Chrome process locking profile. Cleaning up...")
+                import subprocess
+                subprocess.run(["taskkill", "/F", "/IM", "chrome.exe"], capture_output=True)
+                await asyncio.sleep(2)
+                context = await p.chromium.launch_persistent_context(**launch_kwargs)
+            else:
+                raise e
 
         page = context.pages[0] if context.pages else await context.new_page()
 
