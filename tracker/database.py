@@ -80,6 +80,15 @@ class DatabaseManager:
             session.close()
 
     @staticmethod
+    def is_already_applied(url: str) -> bool:
+        session = SessionLocal()
+        try:
+            job = session.query(JobRecord).filter(JobRecord.url == url, JobRecord.status == "APPLIED").first()
+            return job is not None
+        finally:
+            session.close()
+
+    @staticmethod
     def list_recent_jobs(limit: int = 20) -> List[JobRecord]:
         session = SessionLocal()
         try:
