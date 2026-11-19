@@ -22,6 +22,7 @@ from tracker.database import db
 from core.matcher import JobMatcher
 from brain.question_solver import solver
 from naukri.filters import is_valid_software_role
+from career_site.autofiller import CareerSiteAutofiller
 
 matcher = JobMatcher()
 
@@ -232,7 +233,11 @@ class AutonomousNaukriAgent:
             print(f"Recruiter Radar Note: {e}", flush=True)
 
     async def apply_to_job(self, context: BrowserContext, title: str, href: str) -> bool:
-        """Applies to a single job using 1-Click apply + LLM questionnaire review."""
+        """
+        Applies to a job either via:
+        1. External Career Site (Greenhouse, Lever, Workday, Google Forms, Custom ATS)
+        2. Naukri 1-Click apply + LLM questionnaire review
+        """
         if db.is_already_applied(href):
             print(f"  [Skipped Already Applied] {title}", flush=True)
             return False
@@ -243,29 +248,48 @@ class AutonomousNaukriAgent:
             await self.inject_hud(jd_page, f"Inspecting: {title[:40]}", "Resume: Python | LLM Ready")
             await asyncio.sleep(1.8)
 
-            apply_btn = jd_page.locator("button.apply-button, button:has-text('Apply on company site'), button:has-text('Apply')").first
+            apply_btn = jd_page.locator("button.apply-button, button:has-text('Apply on company site'), button:has-text('Apply on website'), button:has-text('Apply')").first
             if await apply_btn.count() == 0 or not await apply_btn.is_visible():
                 print(f"  [Skipped] Apply button not clickable or already applied: {title}", flush=True)
                 await jd_page.close()
                 return False
 
             btn_text = (await apply_btn.inner_text()).strip()
-            if "company site" in btn_text.lower():
-                print(f"  [Skipped External Site] {title}", flush=True)
-                await jd_page.close()
-                return False
 
-            # Visual highlight
+            # Case 1: Explicit External Career Site
+            if "company site" in btn_text.lower() or "website" in btn_text.lower() or "career site" in btn_text.lower():
+                return await self.apply_on_external_career_site(context, jd_page, title, href, apply_btn)
+
+            # Case 2: Standard Apply button - check if it opens external site or 1-click
             try:
                 await apply_btn.evaluate("el => { el.style.border = '4px solid #10b981'; el.style.boxShadow = '0 0 25px #10b981'; }")
             except Exception:
                 pass
 
             print(f"\n---> Applying to: {title}", flush=True)
-            print(f"     Clicking 1-Click Apply...", flush=True)
-            await self.inject_hud(jd_page, "Clicking 1-Click Apply...", "Solving Questionnaire with LLM")
-            await apply_btn.click()
-            await asyncio.sleep(2)
+            print(f"     Clicking Apply button...", flush=True)
+            await self.inject_hud(jd_page, "Clicking Apply...", "Checking 1-Click / External Portal...")
+
+            # Check if clicking spawns a new tab (external career redirect)
+            career_page = None
+            try:
+                async with context.expect_page(timeout=4000) as new_page_info:
+                    await apply_btn.click()
+                career_page = await new_page_info.value
+            except Exception:
+                pass
+
+            if career_page and "naukri.com" not in career_page.url:
+                return await self.apply_on_external_career_site(context, jd_page, title, href, existing_career_page=career_page)
+
+            await asyncio.sleep(1.5)
+
+            # Check if daily quota limit modal appeared on Naukri
+            quota_limit_el = jd_page.locator("div:has-text('limit reached'), div:has-text('daily limit'), div:has-text('application quota'), div:has-text('Upgrade to apply')").first
+            if await quota_limit_el.count() > 0 and await quota_limit_el.is_visible():
+                print(f"  ⚠️ [Naukri 1-Click Quota Exhausted] Daily limit reached for 1-click apply. Skipping this job to prioritize Career Site applications!", flush=True)
+                await jd_page.close()
+                return False
 
             # Solve questionnaire using LLM
             await self.solve_chatbot(jd_page)
@@ -302,6 +326,95 @@ class AutonomousNaukriAgent:
             except Exception:
                 pass
             return False
+
+    async def apply_on_external_career_site(
+        self,
+        context: BrowserContext,
+        jd_page: Page,
+        title: str,
+        href: str,
+        apply_btn: Optional[Any] = None,
+        existing_career_page: Optional[Page] = None
+    ) -> bool:
+        """Handles applying on external company career sites autonomously."""
+        print(f"\n---> [External Career Site Detected] {title}", flush=True)
+        await self.inject_hud(jd_page, f"External Career Site: {title[:35]}", "Launching Company Portal...")
+
+        # Extract company name
+        company_name = "Company"
+        try:
+            comp_el = jd_page.locator("a.company-name, a[class*='comp-name'], div[class*='comp-name']").first
+            if await comp_el.count() > 0:
+                company_name = (await comp_el.inner_text()).strip()
+        except Exception:
+            pass
+
+        career_page: Optional[Page] = existing_career_page
+
+        if not career_page and apply_btn:
+            try:
+                # Try clicking and waiting for popup
+                async with context.expect_page(timeout=7000) as new_page_info:
+                    await apply_btn.click()
+                career_page = await new_page_info.value
+            except Exception:
+                # Check for modal with "Proceed" or "Continue"
+                modal_btn = jd_page.locator("button:has-text('Proceed'), button:has-text('Continue'), a:has-text('Proceed'), a:has-text('Continue')").first
+                if await modal_btn.count() > 0 and await modal_btn.is_visible():
+                    try:
+                        async with context.expect_page(timeout=7000) as new_page_info:
+                            await modal_btn.click()
+                        career_page = await new_page_info.value
+                    except Exception:
+                        await modal_btn.click()
+                        await asyncio.sleep(3)
+                        if "naukri.com" not in jd_page.url:
+                            career_page = jd_page
+                else:
+                    await asyncio.sleep(3)
+                    if "naukri.com" not in jd_page.url:
+                        career_page = jd_page
+
+        # Fallback search among open tabs
+        if not career_page:
+            for p in context.pages:
+                if p != jd_page and "naukri.com" not in p.url:
+                    career_page = p
+                    break
+
+        if not career_page:
+            print(f"  [External Site] Could not access external career portal for {title}", flush=True)
+            await jd_page.close()
+            return False
+
+        try:
+            await career_page.wait_for_load_state("domcontentloaded", timeout=25000)
+        except Exception:
+            pass
+
+        autofiller = CareerSiteAutofiller(resume_type="python")
+        res = await autofiller.apply_on_career_site(
+            page=career_page,
+            job_title=title,
+            company=company_name,
+            job_url=href
+        )
+
+        try:
+            if career_page != jd_page:
+                await career_page.close()
+        except Exception:
+            pass
+
+        try:
+            await jd_page.close()
+        except Exception:
+            pass
+
+        if res.get("success", False):
+            self.total_applied += 1
+            return True
+        return False
 
     async def solve_chatbot(self, jd_page: Page):
         """Autonomous questionnaire solver using Gemini 3.5 Flash Lite + verified resume."""
