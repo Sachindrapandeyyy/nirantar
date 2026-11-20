@@ -53,12 +53,9 @@ async def run_master_orchestrator(portal: str = "naukri", apply_url: str = ""):
         li_agent = AutonomousLinkedInAgent()
         await li_agent.run()
     elif portal_lower == "all":
-        console.print("[bold magenta]Launching Unified Multi-Agent Brain (Naukri + LinkedIn + Career Boards)...[/bold magenta]")
-        from linkedin.agent import AutonomousLinkedInAgent
-        li_agent = AutonomousLinkedInAgent()
-        await li_agent.run()
-        naukri_agent = AutonomousNaukriAgent()
-        await naukri_agent.run_continuous_engine()
+        console.print("[bold magenta]Launching Unified Multi-Agent Brain (Naukri + LinkedIn + Direct Career ATS Boards)...[/bold magenta]")
+        from core.unified_engine import unified_brain
+        await unified_brain.run_unified_continuous_lifecycle()
     elif portal_lower == "career_scraper":
         console.print("[bold green]Launching Direct Career Pages Scraper...[/bold green]")
         from playwright.async_api import async_playwright
@@ -84,9 +81,9 @@ def main():
     parser.add_argument(
         "--portal",
         type=str,
-        default="naukri",
-        choices=["naukri", "linkedin", "career_scraper", "all"],
-        help="Target portal: naukri, linkedin, career_scraper, all"
+        default="all",
+        choices=["all", "naukri", "linkedin", "career_scraper"],
+        help="Target portal: all (unified Naukri + LinkedIn + Career Sites), naukri, linkedin, career_scraper"
     )
     parser.add_argument("--apply", type=str, default="", help="Direct apply to a specific external career page URL")
     parser.add_argument("--dashboard", action="store_true", help="Launch interactive Mission Control web dashboard (http://localhost:8000)")
