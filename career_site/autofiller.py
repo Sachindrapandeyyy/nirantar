@@ -474,8 +474,21 @@ class CareerSiteAutofiller:
                 filled_step2 = await self.autofill_form_elements(target_scope, page)
                 total_fields_filled += filled_step2
 
-        # ZERO-FILL GUARD: If zero fields were filled, abort submission to avoid false positive!
+        # ZERO-FILL GUARD: If zero fields were filled, try Browser-Use AI agent or safely abort
         if total_fields_filled == 0:
+            # Check if Browser-Use AI Visual Fallback can resolve this custom form
+            try:
+                from career_site.browser_use_agent import AutonomousBrowserUseAgent
+                bu_agent = AutonomousBrowserUseAgent(resume_type=self.resume_type)
+                if bu_agent.is_ready():
+                    print(f"  🧠 [AI Visual Fallback] Invoking Browser-Use Agent for {company}...", flush=True)
+                    await self.inject_hud(page, f"AI Agent: {company}", "Activating Browser-Use Vision Agent...")
+                    bu_res = await bu_agent.apply_on_portal(page.url, job_title, company)
+                    if bu_res.get("success", False):
+                        return bu_res
+            except Exception as e:
+                logger.debug(f"Browser-Use fallback error: {e}")
+
             print(f"  ⚠️ [Submission Aborted] No form fields were filled (0 fields filled). Skipping false submission.", flush=True)
             safe_company = re.sub(r'[^a-zA-Z0-9]', '_', company)[:20]
             safe_title = re.sub(r'[^a-zA-Z0-9]', '_', job_title)[:20]
