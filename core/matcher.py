@@ -92,7 +92,7 @@ class JobMatcher:
             reasoning=reasoning
         )
 
-    def is_applicable(self, title: str, description: str = "", exp_text: str = "") -> Tuple[bool, MatchResult]:
+    def is_applicable(self, title: str, description: str = "", exp_text: str = "", url: str = "") -> Tuple[bool, MatchResult]:
         """
         Evaluates whether a role aligns with Sachindra's verified qualifications.
         Returns: (is_applicable: bool, match_result: MatchResult).
@@ -102,7 +102,7 @@ class JobMatcher:
 
         # 1. Fresher / Seniority Check (Candidate is 2026 Batch Fresher)
         from naukri.filters import is_fresher_job, is_valid_software_role
-        is_fresh, reason = is_fresher_job(title, exp_text)
+        is_fresh, reason = is_fresher_job(title, exp_text, url=url)
         if not is_fresh:
             match_res.reasoning = f"Filtered Out: {reason}"
             return False, match_res

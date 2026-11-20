@@ -136,6 +136,33 @@ class CareerSiteAutofiller:
                 "message": "Career application exceeded 75s timeout limit."
             }
 
+    async def dismiss_cookie_banners(self, page: Page):
+        """Proactively dismisses GDPR / Cookie consent banners that block interactions."""
+        cookie_selectors = [
+            "button#onetrust-accept-btn-handler",
+            "button:has-text('Accept All')",
+            "button:has-text('Accept Cookies')",
+            "button:has-text('Accept all cookies')",
+            "button:has-text('I Accept')",
+            "button:has-text('Allow all')",
+            "button:has-text('Agree')",
+            "button:has-text('Got it')",
+            "button[id*='cookie-accept']",
+            "button[class*='cookie-accept']",
+            "button[class*='consent-accept']",
+            "button[class*='cookie-btn']"
+        ]
+        for sel in cookie_selectors:
+            try:
+                btn = page.locator(sel).first
+                if await btn.count() > 0 and await btn.is_visible():
+                    await btn.click(timeout=1500)
+                    print(f"  [Cookie Banner Dismissed] via '{sel}'", flush=True)
+                    await asyncio.sleep(0.5)
+                    break
+            except Exception:
+                pass
+
     async def _execute_workflow(
         self,
         page: Page,
@@ -152,7 +179,19 @@ class CareerSiteAutofiller:
         print("=" * 70, flush=True)
 
         await self.inject_hud(page, f"Target: {company}", f"Role: {job_title[:30]} | Stack: {self.resume_type.upper()} | Detecting ATS...")
-        
+
+        # Check for blank interstitial / loading screen
+        try:
+            body_txt = await page.evaluate("() => document.body ? document.body.innerText.trim() : ''")
+            if len(body_txt) < 30:
+                print("  Page appears blank/loading. Waiting 3s for hydration/redirect...", flush=True)
+                await asyncio.sleep(3)
+        except Exception:
+            pass
+
+        # Proactively dismiss GDPR / Cookie banners
+        await self.dismiss_cookie_banners(page)
+
         # Wait for dynamic form elements to render
         try:
             await page.wait_for_selector("input, textarea, form, div[role='main']", state="visible", timeout=10000)
@@ -197,6 +236,8 @@ class CareerSiteAutofiller:
         if await page.locator("iframe#grnhse_iframe").count() > 0:
             target = page.frame_locator("iframe#grnhse_iframe")
 
+        filled_count = 0
+
         # Fill identity
         field_mappings = [
             ("#first_name", self.kb["first_name"]),
@@ -211,6 +252,7 @@ class CareerSiteAutofiller:
             if await loc.count() > 0 and await loc.is_visible():
                 await self.highlight_element(loc)
                 await loc.fill(val)
+                filled_count += 1
                 await asyncio.sleep(0.15)
 
         # Social links
@@ -223,6 +265,7 @@ class CareerSiteAutofiller:
             if await loc.count() > 0 and await loc.is_visible():
                 await self.highlight_element(loc)
                 await loc.fill(val)
+                filled_count += 1
                 await asyncio.sleep(0.15)
 
         # Resume upload
@@ -233,15 +276,17 @@ class CareerSiteAutofiller:
             if await file_input.count() > 0:
                 await file_input.set_input_files(str(resume_file))
                 print(f"  Attached {self.resume_type.upper()} resume: {resume_file.name}", flush=True)
+                filled_count += 1
                 await asyncio.sleep(1.5)
 
         # Dynamic questions & dropdowns
-        await self.autofill_form_elements(target, page)
+        filled_dyn = await self.autofill_form_elements(target, page)
+        filled_count += filled_dyn
 
         # Submit Application
-        await self.inject_hud(page, f"ATS: Greenhouse | {company}", "Submitting & Verifying...")
+        await self.inject_hud(page, f"ATS: Greenhouse | {company}", f"Submitting ({filled_count} fields filled)...")
         submit_btn = target.locator("#submit_app, input[type='submit'], button[type='submit']:has-text('Submit')").first
-        return await self._click_submit_and_verify(page, submit_btn, company, job_title)
+        return await self._click_submit_and_verify(page, submit_btn, company, job_title, fields_filled=filled_count)
 
     async def handle_lever(self, page: Page, job_title: str, company: str) -> Dict[str, Any]:
         """Handles Lever.co application pages."""
@@ -256,6 +301,8 @@ class CareerSiteAutofiller:
                 await asyncio.sleep(2)
 
         await self.inject_hud(page, f"ATS: Lever | {company}", f"Filling Application Details ({self.resume_type.upper()})...")
+
+        filled_count = 0
 
         # Personal details
         field_mappings = [
@@ -273,6 +320,7 @@ class CareerSiteAutofiller:
             if await loc.count() > 0 and await loc.is_visible():
                 await self.highlight_element(loc)
                 await loc.fill(val)
+                filled_count += 1
                 await asyncio.sleep(0.15)
 
         # Resume upload
@@ -283,21 +331,24 @@ class CareerSiteAutofiller:
             if await file_input.count() > 0:
                 await file_input.set_input_files(str(resume_file))
                 print(f"  Attached {self.resume_type.upper()} resume: {resume_file.name}", flush=True)
+                filled_count += 1
                 await asyncio.sleep(1.5)
 
         # Dynamic questions & dropdowns
-        await self.autofill_form_elements(page, page)
+        filled_dyn = await self.autofill_form_elements(page, page)
+        filled_count += filled_dyn
 
         # Submit
-        await self.inject_hud(page, f"ATS: Lever | {company}", "Submitting & Verifying...")
+        await self.inject_hud(page, f"ATS: Lever | {company}", f"Submitting ({filled_count} fields filled)...")
         submit_btn = page.locator("#btn-submit, button[data-qa='btn-submit'], button:has-text('Submit Application')").first
-        return await self._click_submit_and_verify(page, submit_btn, company, job_title)
+        return await self._click_submit_and_verify(page, submit_btn, company, job_title, fields_filled=filled_count)
 
     async def handle_google_form(self, page: Page, job_title: str, company: str) -> Dict[str, Any]:
         """Handles Google Forms job applications."""
         print(" -> Detected ATS: Google Forms", flush=True)
         await self.inject_hud(page, f"Portal: Google Form | {company}", "Inspecting Form Fields...")
 
+        filled_count = 0
         # Find questions
         question_containers = await page.locator("div[role='listitem']").all()
         for container in question_containers:
@@ -315,6 +366,7 @@ class CareerSiteAutofiller:
                 if await text_input.count() > 0 and await text_input.is_visible():
                     await self.highlight_element(text_input)
                     await text_input.fill(ans)
+                    filled_count += 1
                     await asyncio.sleep(0.15)
                     continue
 
@@ -325,61 +377,136 @@ class CareerSiteAutofiller:
                         lbl = (await r.inner_text()).strip()
                         if ans.lower() in lbl.lower() or lbl.lower() in ans.lower():
                             await r.click()
+                            filled_count += 1
                             await asyncio.sleep(0.15)
                             break
             except Exception as e:
                 logger.debug(f"Google Form field error: {e}")
 
         submit_btn = page.locator("div[role='button']:has-text('Submit'), span:has-text('Submit')").first
-        return await self._click_submit_and_verify(page, submit_btn, company, job_title)
+        return await self._click_submit_and_verify(page, submit_btn, company, job_title, fields_filled=filled_count)
 
     async def handle_generic_form(self, page: Page, job_title: str, company: str) -> Dict[str, Any]:
         """Handles arbitrary company career portals, Workable, SmartRecruiters, React/Angular apps."""
         print(" -> Detected ATS: Generic HTML / React Portal", flush=True)
         await self.inject_hud(page, f"Portal: {company}", f"Scanning Fields ({self.resume_type.upper()})...")
 
+        # 0. Check if this is a JD / Landing page where form is not yet visible
+        try:
+            visible_inputs = await page.locator("input:not([type='hidden']):not([type='submit']):not([type='button']), textarea").all()
+            visible_count = 0
+            for vi in visible_inputs:
+                if await vi.is_visible():
+                    visible_count += 1
+
+            if visible_count < 2:
+                print(f"  Only {visible_count} visible input(s) found. Searching for 'Apply Now' form opener...", flush=True)
+                openers = [
+                    "a:has-text('Apply for this job')",
+                    "button:has-text('Apply for this job')",
+                    "a:has-text('Apply Now')",
+                    "button:has-text('Apply Now')",
+                    "a:has-text('Apply now')",
+                    "button:has-text('Apply now')",
+                    "a:has-text('Apply Online')",
+                    "button:has-text('Apply Online')",
+                    "a.postings-btn",
+                    "a[href*='apply']",
+                    "button[data-qa*='apply']",
+                    "a:has-text('Apply')",
+                    "button:has-text('Apply')"
+                ]
+                for op in openers:
+                    try:
+                        op_btn = page.locator(op).first
+                        if await op_btn.count() > 0 and await op_btn.is_visible():
+                            btn_txt = (await op_btn.inner_text()).strip()
+                            print(f"  Clicking form opener: '{btn_txt}' ({op})", flush=True)
+                            await self.highlight_element(op_btn, "#38bdf8")
+                            await op_btn.click()
+                            await asyncio.sleep(2.5)
+                            break
+                    except Exception:
+                        pass
+        except Exception:
+            pass
+
+        # Check for application iframe (e.g. Workable, Greenhouse embedded)
+        target_scope = page
+        for fr in page.frames:
+            if fr != page.main_frame:
+                if any(kw in fr.url.lower() for kw in ["greenhouse", "lever", "workable", "smartrecruiters", "bamboohr", "apply"]):
+                    target_scope = fr
+                    print(f"  Target application iframe detected: {fr.url[:60]}...", flush=True)
+                    break
+
+        total_fields_filled = 0
+
         # First, upload resume if file input is available
         resume_file = self.get_resume_path()
         if resume_file and resume_file.exists():
-            file_inputs = await page.locator("input[type='file']").all()
+            file_inputs = await target_scope.locator("input[type='file']").all()
             for fi in file_inputs:
                 try:
                     await fi.set_input_files(str(resume_file))
                     print(f"  Attached {self.resume_type.upper()} resume to file input: {resume_file.name}", flush=True)
+                    total_fields_filled += 1
                     await asyncio.sleep(1.5)
                     break
                 except Exception:
                     pass
 
         # Autofill all form elements (inputs, textareas, selects, radios, checkboxes)
-        await self.autofill_form_elements(page, page)
+        filled = await self.autofill_form_elements(target_scope, page)
+        total_fields_filled += filled
 
         # Check for multi-step "Next" / "Continue"
-        next_btn = page.locator("button:has-text('Next'), button:has-text('Continue'), input[value='Next'], input[value='Continue']").first
+        next_btn = target_scope.locator("button:has-text('Next'), button:has-text('Continue'), input[value='Next'], input[value='Continue']").first
         if await next_btn.count() > 0 and await next_btn.is_visible():
-            submit_count = await page.locator("button[type='submit'], input[type='submit'], button:has-text('Submit')").count()
-            if submit_count == 0 or not await page.locator("button:has-text('Submit')").first.is_visible():
+            submit_count = await target_scope.locator("button[type='submit'], input[type='submit'], button:has-text('Submit')").count()
+            if submit_count == 0 or not await target_scope.locator("button:has-text('Submit')").first.is_visible():
                 print("  Multi-step form detected! Proceeding to next step...", flush=True)
                 await self.inject_hud(page, f"Portal: {company}", "Moving to Next Step...")
                 await self.highlight_element(next_btn, "#38bdf8")
                 await next_btn.click()
                 await asyncio.sleep(2.5)
                 # Fill second step
-                await self.autofill_form_elements(page, page)
+                filled_step2 = await self.autofill_form_elements(target_scope, page)
+                total_fields_filled += filled_step2
 
-        # Submit Application
-        await self.inject_hud(page, f"Portal: {company}", "Submitting & Verifying Application...")
-        submit_btn = page.locator(
-            "button[type='submit'], input[type='submit'], button:has-text('Submit Application'), button:has-text('Submit'), button:has-text('Send Application'), button:has-text('Apply Now')"
+        # ZERO-FILL GUARD: If zero fields were filled, abort submission to avoid false positive!
+        if total_fields_filled == 0:
+            print(f"  ⚠️ [Submission Aborted] No form fields were filled (0 fields filled). Skipping false submission.", flush=True)
+            safe_company = re.sub(r'[^a-zA-Z0-9]', '_', company)[:20]
+            safe_title = re.sub(r'[^a-zA-Z0-9]', '_', job_title)[:20]
+            proof_path = str(self.proof_dir / f"UNFILLED_{safe_company}_{safe_title}_{int(time.time())}.png")
+            try:
+                await page.screenshot(path=proof_path)
+            except Exception:
+                pass
+            return {
+                "success": False,
+                "status": "ZERO_FIELDS_FILLED",
+                "proof": proof_path,
+                "message": "Application form had 0 fields filled. Aborted submission to prevent false applied state."
+            }
+
+        # Submit Application (STRICTLY submit buttons, NEVER 'Apply Now')
+        await self.inject_hud(page, f"Portal: {company}", f"Submitting ({total_fields_filled} fields filled)...")
+        submit_btn = target_scope.locator(
+            "button[type='submit'], input[type='submit'], button:has-text('Submit Application'), button:has-text('Submit'), button:has-text('Send Application'), button:has-text('Complete Application')"
         ).first
-        return await self._click_submit_and_verify(page, submit_btn, company, job_title)
+        return await self._click_submit_and_verify(page, submit_btn, company, job_title, fields_filled=total_fields_filled)
 
-    async def autofill_form_elements(self, target: Any, page: Page):
+    async def autofill_form_elements(self, target: Any, page: Page) -> int:
         """
         Extracts semantic context for every visible input, textarea, select, and radio,
         and fills with verified candidate data without hallucination.
         Fires native DOM events for seamless React / Angular / Vue state binding.
+        Returns total number of fields filled.
         """
+        filled_count = 0
+
         # 1. TEXT INPUTS
         inputs = await target.locator(
             "input:not([type='hidden']):not([type='submit']):not([type='button']):not([type='reset']):not([type='file']):not([type='checkbox']):not([type='radio'])"
@@ -413,6 +540,7 @@ class CareerSiteAutofiller:
                     except Exception:
                         pass
                     print(f"    [Field Filled] '{ctx[:30]}...' -> {str(matched_val)[:25]}", flush=True)
+                    filled_count += 1
                     await asyncio.sleep(0.1)
             except Exception as e:
                 logger.debug(f"Error filling text input: {e}")
@@ -441,6 +569,7 @@ class CareerSiteAutofiller:
                     except Exception:
                         pass
                     print(f"    [Textarea Filled] '{ctx[:30]}...' -> {str(matched_val)[:30]}...", flush=True)
+                    filled_count += 1
                     await asyncio.sleep(0.15)
             except Exception as e:
                 logger.debug(f"Error filling textarea: {e}")
@@ -453,7 +582,8 @@ class CareerSiteAutofiller:
                     continue
 
                 ctx = await self._get_element_context(sel)
-                await self._handle_select_dropdown(sel, ctx)
+                if await self._handle_select_dropdown(sel, ctx):
+                    filled_count += 1
                 await asyncio.sleep(0.1)
             except Exception as e:
                 logger.debug(f"Error handling select: {e}")
@@ -471,11 +601,13 @@ class CareerSiteAutofiller:
                 if any(k in ctx for k in ["authorized", "relocate", "18 years", "eligible"]):
                     if val_attr in ["yes", "true", "1"] or "yes" in ctx:
                         await rad.check()
+                        filled_count += 1
                         await asyncio.sleep(0.1)
                 # If question is about sponsorship or criminal record -> pick NO
                 elif any(k in ctx for k in ["sponsorship", "require visa", "criminal", "felony", "backlog"]):
                     if val_attr in ["no", "false", "0"] or "no" in ctx:
                         await rad.check()
+                        filled_count += 1
                         await asyncio.sleep(0.1)
         except Exception:
             pass
@@ -489,15 +621,18 @@ class CareerSiteAutofiller:
                 ctx = await self._get_element_context(cb)
                 if any(k in ctx for k in ["agree", "consent", "terms", "policy", "certify", "acknowledge"]):
                     await cb.check()
+                    filled_count += 1
                     await asyncio.sleep(0.1)
         except Exception:
             pass
 
-    async def _handle_select_dropdown(self, sel: Locator, ctx: str):
-        """Intelligently matches select options based on verified candidate knowledge base."""
+        return filled_count
+
+    async def _handle_select_dropdown(self, sel: Locator, ctx: str) -> bool:
+        """Intelligently matches select options based on verified candidate knowledge base. Returns True if selected."""
         options = await sel.locator("option").all()
         if not options:
-            return
+            return False
 
         opt_texts = []
         for o in options:
@@ -506,7 +641,7 @@ class CareerSiteAutofiller:
                 opt_texts.append(txt)
 
         if not opt_texts:
-            return
+            return False
 
         ctx_lower = ctx.lower()
         target_val = None
@@ -533,7 +668,7 @@ class CareerSiteAutofiller:
                     await self.highlight_element(sel, "#10b981")
                     await sel.select_option(label=opt)
                     print(f"    [Select Chosen] '{ctx[:25]}' -> {opt}", flush=True)
-                    return
+                    return True
 
         # Fallback to LLM
         best = await solver.solve_question(ctx, options=opt_texts, profile=self.profile)
@@ -543,7 +678,9 @@ class CareerSiteAutofiller:
                     await self.highlight_element(sel, "#10b981")
                     await sel.select_option(label=opt)
                     print(f"    [Select Chosen (AI)] '{ctx[:25]}' -> {opt}", flush=True)
-                    return
+                    return True
+
+        return False
 
     async def _get_element_context(self, el: Locator) -> str:
         """Extracts comprehensive semantic context (labels, placeholders, IDs) for an element."""
@@ -551,6 +688,7 @@ class CareerSiteAutofiller:
             let parts = [];
             if (element.name) parts.push(element.name);
             if (element.id) parts.push(element.id);
+            if (element.type) parts.push(element.type);
             if (element.placeholder) parts.push(element.placeholder);
             if (element.getAttribute('aria-label')) parts.push(element.getAttribute('aria-label'));
             if (element.getAttribute('title')) parts.push(element.getAttribute('title'));
@@ -570,11 +708,21 @@ class CareerSiteAutofiller:
                 parts.push(prev.innerText);
             }
             
-            // Check parent field container
-            let container = element.closest('.form-group, .field, div[class*="field"], div[class*="form-item"], div[class*="question"]');
-            if (container) {
-                let labelEl = container.querySelector('label, span[class*="label"], div[class*="label"]');
-                if (labelEl) parts.push(labelEl.innerText);
+            // Walk up to 4 parent elements to capture <p>, <label>, <span>, <div> labels
+            let p = element.parentElement;
+            let depth = 0;
+            while (p && depth < 4) {
+                let candidates = p.querySelectorAll('label, p, span, div, b, strong');
+                for (let c of candidates) {
+                    if (c !== element && !c.contains(element)) {
+                        let txt = (c.innerText || '').trim();
+                        if (txt && txt.length > 1 && txt.length < 80 && !parts.includes(txt)) {
+                            parts.push(txt);
+                        }
+                    }
+                }
+                p = p.parentElement;
+                depth++;
             }
             
             return parts.join(' ').toLowerCase().trim();
@@ -589,7 +737,8 @@ class CareerSiteAutofiller:
         page: Page,
         submit_btn: Locator,
         company: str,
-        job_title: str
+        job_title: str,
+        fields_filled: int = 1
     ) -> Dict[str, Any]:
         """
         Clicks Submit and executes deterministic multi-signal verification:
@@ -603,6 +752,17 @@ class CareerSiteAutofiller:
         safe_title = re.sub(r'[^a-zA-Z0-9]', '_', job_title)[:20]
         timestamp = int(time.time())
         proof_path = str(self.proof_dir / f"{safe_company}_{safe_title}_{timestamp}.png")
+
+        # Guard: If no fields were filled, abort immediately!
+        if fields_filled == 0:
+            print("  ⚠️ Verification Refused: 0 form fields were filled.", flush=True)
+            await page.screenshot(path=proof_path)
+            return {
+                "success": False,
+                "status": "ZERO_FIELDS_FILLED",
+                "proof": proof_path,
+                "message": "Aborted: Zero fields were filled on the form."
+            }
 
         if await submit_btn.count() == 0 or not await submit_btn.is_visible():
             await page.screenshot(path=proof_path)
@@ -678,15 +838,18 @@ class CareerSiteAutofiller:
             except Exception:
                 pass
 
-            # Check 4: Check if form disappeared after submit
-            if elapsed >= 6:
+            # Check 4: Check if form disappeared after submit (ONLY if fields were filled and positive signal exists)
+            if elapsed >= 6 and fields_filled > 0 and not error_msg:
                 try:
                     remaining_inputs = await page.locator("input:not([type='hidden']), textarea").all()
                     visible_inputs = [i for i in remaining_inputs if await i.is_visible()]
                     if len(visible_inputs) == 0:
-                        confirmed = True
-                        print(f"  ✔ Confirmation Signal 3: Form inputs cleared and dismissed", flush=True)
-                        break
+                        cur_url = page.url.lower()
+                        page_body = (await page.content()).lower()
+                        if cur_url != initial_url.lower() or any(w in page_body for w in ["thank", "success", "received", "submitted", "confirmed", "appreciate", "status"]):
+                            confirmed = True
+                            print(f"  ✔ Confirmation Signal 3: Form inputs cleared and server confirmation detected", flush=True)
+                            break
                 except Exception:
                     pass
 

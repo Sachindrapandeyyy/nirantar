@@ -130,11 +130,11 @@ def match_field_to_value(field_key: str, label: str = "", placeholder: str = "",
     combined = f"{field_key} {label} {placeholder}".lower()
 
     # 1. Email (Top Priority)
-    if "email" in combined:
+    if any(k in combined for k in ["email", "e-mail", "mail id", "mail_id", "example@", "@domain"]) or "@" in placeholder:
         return kb["email"]
 
     # 2. Phone & Mobile
-    if any(k in combined for k in ["phone", "mobile", "contact", "cell", "whatsapp"]):
+    if any(k in combined for k in ["phone", "mobile", "contact", "cell", "whatsapp", "+91", "98765", "10-digit", "10 digit"]):
         if "code" in combined:
             return kb["country_code"]
         return kb["phone"]
@@ -173,7 +173,7 @@ def match_field_to_value(field_key: str, label: str = "", placeholder: str = "",
     # 6. Education
     if any(k in combined for k in ["college", "university", "institution", "school name", "institute"]):
         return kb["college"]
-    if any(k in combined for k in ["degree", "qualification", "education level", "highest degree"]):
+    if any(k in combined for k in ["degree", "qualification", "education level", "highest degree", "b.tech", "be / mca", "b.tech / be", "highest qualification"]):
         return kb["degree"]
     if any(k in combined for k in ["major", "discipline", "branch", "department", "stream", "field of study"]):
         return kb["major"]
@@ -189,11 +189,11 @@ def match_field_to_value(field_key: str, label: str = "", placeholder: str = "",
         return kb["backlogs"]
 
     # 7. Work Experience & Current Employment
-    if any(k in combined for k in ["current company", "current employer", "recent company", "employer", "present employer", "organization", "org"]):
+    if any(k in combined for k in ["current company", "current employer", "recent company", "employer", "present employer", "organization", "org", "company name", "current or last company", "current/last company"]):
         return kb["current_company"]
-    if any(k in combined for k in ["current title", "current designation", "current role", "job title", "designation"]):
+    if any(k in combined for k in ["current title", "current designation", "current role", "job title", "designation", "role title"]):
         return kb["current_title"]
-    if any(k in combined for k in ["years of experience", "total experience", "overall experience", "experience in years", "total exp", "exp (in years)"]):
+    if any(k in combined for k in ["years of experience", "total experience", "overall experience", "experience in years", "total exp", "exp (in years)", "in years (e.g.", "work experience", "experience (years)"]):
         return kb["experience_years"]
     if any(k in combined for k in ["skills", "tech stack", "technologies", "key skills", "core competencies", "technical skills"]):
         return kb["skills"]
@@ -215,7 +215,13 @@ def match_field_to_value(field_key: str, label: str = "", placeholder: str = "",
         if "lpa" in combined or "lac" in combined or "lakh" in combined:
             return kb["current_ctc_lpa"]
         return kb["current_ctc"]
-    if any(k in combined for k in ["notice period", "notice days", "notice", "availability", "how soon can you join", "earliest start date", "join within", "start date"]):
+    if any(k in combined for k in ["ctc", "salary", "lpa", "compensation", "annual ctc"]):
+        if "current" in combined or "present" in combined:
+            return kb["current_ctc_lpa"] if "lpa" in combined else kb["current_ctc"]
+        return kb["expected_ctc_lpa"] if "lpa" in combined else kb["expected_ctc"]
+    if any(k in combined for k in ["notice period", "notice days", "notice", "availability", "how soon can you join", "earliest start date", "join within", "start date", "notice (in days)", "in days (e.g."]):
+        if "day" in combined:
+            return kb["notice_days"]
         return kb["notice_period"]
 
     # 10. Legal, Work Authorization & Relocation

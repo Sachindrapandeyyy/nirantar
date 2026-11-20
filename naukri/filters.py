@@ -2,16 +2,18 @@ import re
 from typing import Tuple
 
 
-def is_fresher_job(title: str, exp_text: str = "") -> Tuple[bool, str]:
+def is_fresher_job(title: str, exp_text: str = "", url: str = "") -> Tuple[bool, str]:
     """
     Strictly verifies if a job is suited for a Fresher / 2026 Batch Graduate (0-2 Years).
     Filters out Senior, Lead, Architect, and jobs requiring 3+ years of experience.
+    Strictly rejects any upper experience bracket >= 4 years (e.g. 0-5, 0-7, 1-4, 2-5).
     Returns: (is_fresher: bool, reason: str).
     """
     title_lower = title.lower()
     exp_lower = exp_text.lower().strip()
+    url_lower = url.lower().strip()
 
-    # 1. Seniority Titles & High-Level Roles
+    # 1. Seniority Titles & High-Level Roles in Title
     senior_titles = [
         "senior", "sr.", "sr ", "lead", "principal", "staff", "architect",
         "engineering manager", "tech lead", "team lead", "director", "head of",
@@ -22,23 +24,43 @@ def is_fresher_job(title: str, exp_text: str = "") -> Tuple[bool, str]:
         if st in title_lower:
             return False, f"Senior title detected ('{st}')"
 
-    # 2. Explicit High Years in Title (e.g. 'Python Dev (3+ Years)', 'Java 4-8 Yrs')
+    # 2. Seniority & Experience slugs in Job URL (e.g. -0-to-5-years, -0-to-7-years, -senior-)
+    if url_lower:
+        url_senior_slugs = ["-senior-", "-lead-", "-architect-", "-tech-lead-", "-manager-"]
+        for us in url_senior_slugs:
+            if us in url_lower:
+                return False, f"Senior slug in URL ('{us}')"
+
+        url_exp_match = re.search(r"(\d+)-to-(\d+)-years?", url_lower)
+        if url_exp_match:
+            u_min = int(url_exp_match.group(1))
+            u_max = int(url_exp_match.group(2))
+            if u_max >= 4:
+                return False, f"URL experience bracket {u_min}-to-{u_max} years exceeds entry level"
+            if u_min >= 3:
+                return False, f"URL experience bracket {u_min}-to-{u_max} years requires >= 3 yrs"
+
+    # 3. Explicit High Years in Title (e.g. 'Python Dev (3+ Years)', 'Java 4-8 Yrs', '0-5 Yrs')
     title_exp_match = re.search(r"(\d+)\s*(?:\+|-\s*(\d+))\s*(?:yrs?|years?)", title_lower)
     if title_exp_match:
         min_yrs = int(title_exp_match.group(1))
+        max_yrs = int(title_exp_match.group(2)) if title_exp_match.group(2) else None
+        if max_yrs is not None and max_yrs >= 4:
+            return False, f"Title experience bracket {min_yrs}-{max_yrs} Yrs exceeds entry level"
         if min_yrs >= 3:
             return False, f"Title requires {min_yrs}+ years experience"
 
-    # 3. Experience Range on Job Card / Tuple (e.g. '0-1 Yrs', '3-5 Yrs', '5-8 Yrs')
+    # 4. Experience Range on Job Card / Tuple (e.g. '0-1 Yrs', '0-5 Yrs', '0-7 Yrs', '3-5 Yrs')
     if exp_lower:
         range_match = re.search(r"(\d+)\s*-\s*(\d+)", exp_lower)
         if range_match:
             min_exp = int(range_match.group(1))
             max_exp = int(range_match.group(2))
+            # Any job with upper bracket >= 4 (0-4, 0-5, 0-7, 1-4, 2-5, 3-5) is NOT for freshers!
+            if max_exp >= 4:
+                return False, f"Experience bracket {min_exp}-{max_exp} Yrs exceeds entry level (max allowed: 3 yrs)"
             if min_exp >= 3:
                 return False, f"Experience bracket {min_exp}-{max_exp} Yrs is senior level (requires >= 3 yrs)"
-            if min_exp >= 2 and max_exp >= 5:
-                return False, f"Experience bracket {min_exp}-{max_exp} Yrs exceeds entry level"
 
         plus_match = re.search(r"(\d+)\+", exp_lower)
         if plus_match:

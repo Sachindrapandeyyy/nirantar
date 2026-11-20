@@ -45,6 +45,35 @@ def test_knowledge_base_coverage():
     assert "NTPC" in match_field_to_value("project", "Describe a challenging project you built")
 
 
+def test_real_world_placeholder_coverage():
+    # Real-world React/Tailwind placeholders
+    assert match_field_to_value("input_1", placeholder="example@domain.com") == "sachindrapandey328@gmail.com"
+    assert match_field_to_value("input_2", placeholder="+91 98765 43210") == "7905604539"
+    assert match_field_to_value("input_3", placeholder="e.g. B.Tech / BE / MCA") == "B.Tech"
+    assert match_field_to_value("input_4", label="Expected CTC", placeholder="in LPA") == "7.5 LPA"
+    assert match_field_to_value("input_5", label="Notice Period", placeholder="in Days (e.g. 0, 15, 30)") == "0"
+
+
+@pytest.mark.asyncio
+async def test_zero_fill_guard():
+    from unittest.mock import AsyncMock, MagicMock
+    autofiller = CareerSiteAutofiller(resume_type="python")
+
+    mock_page = AsyncMock()
+    mock_btn = AsyncMock()
+
+    # When 0 fields are filled, _click_submit_and_verify must refuse verification
+    res = await autofiller._click_submit_and_verify(
+        page=mock_page,
+        submit_btn=mock_btn,
+        company="TestCorp",
+        job_title="Python Dev",
+        fields_filled=0
+    )
+    assert res["success"] is False
+    assert res["status"] == "ZERO_FIELDS_FILLED"
+
+
 def test_career_autofiller_init_and_resume():
     autofiller = CareerSiteAutofiller(resume_type="python")
     resume_path = autofiller.get_resume_path()

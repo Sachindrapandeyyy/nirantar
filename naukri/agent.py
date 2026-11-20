@@ -552,7 +552,7 @@ class AutonomousNaukriAgent:
                     except Exception:
                         pass
 
-                    is_app, match_res = matcher.is_applicable(title, exp_text=exp_text)
+                    is_app, match_res = matcher.is_applicable(title, exp_text=exp_text, url=href)
                     if not is_app:
                         print(f"  [Skipped Role] '{title}' ({exp_text or 'No Exp Tag'}) -> {match_res.reasoning}", flush=True)
                         continue
@@ -613,7 +613,7 @@ class AutonomousNaukriAgent:
                         except Exception:
                             pass
 
-                        is_app, match_res = matcher.is_applicable(title, exp_text=exp_text)
+                        is_app, match_res = matcher.is_applicable(title, exp_text=exp_text, url=href)
                         if not is_app:
                             print(f"   [Skipped Role] '{title}' ({exp_text or 'No Exp Tag'}) -> {match_res.reasoning}", flush=True)
                             continue
