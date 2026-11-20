@@ -254,6 +254,18 @@ class AutonomousNaukriAgent:
             unread = await page.locator("span.unread, div[class*='unread']").count()
             if unread > 0:
                 print(f"👉 NOTICE: You have {unread} unread recruiter messages!", flush=True)
+
+            # Recruiter Radar: Also check Gmail for interview alerts / test links
+            try:
+                from listeners.email_watcher import EmailWatcher
+                ew = EmailWatcher()
+                email_alerts = ew.check_inbox()
+                if email_alerts:
+                    for alert in email_alerts:
+                        if alert.get("type") == "INTERVIEW":
+                            print(f"  🎯 [INTERVIEW INVITATION] {alert.get('subject')} from {alert.get('from')}", flush=True)
+            except Exception:
+                pass
         except Exception as e:
             print(f"Recruiter Radar Note: {e}", flush=True)
 
@@ -631,7 +643,7 @@ class AutonomousNaukriAgent:
         print("       NIRANTAR: CONTINUOUS NON-STOP NAUKRI AUTONOMOUS ENGINE", flush=True)
         print("=" * 75, flush=True)
         print(f"Candidate: {self.profile.full_name}", flush=True)
-        print(f"Target Role: Python Developer / Backend / FastAPI / Django", flush=True)
+        print("Target Stacks: Python & Java Engineering (0-2 Yrs Freshers)", flush=True)
         print("Engine Mode: CONTINUOUS NON-STOP (Will keep running while laptop is on)", flush=True)
         print("=" * 75, flush=True)
 

@@ -32,12 +32,9 @@ dev = [
     "ruff>=0.5.0",
     "mypy>=1.10.0"
 ]
-listeners = [
-    "telethon>=1.36.0"
-]
 
 [project.scripts]
-nirantar = "main:cli"
+nirantar = "main:main"
 
 [tool.ruff]
 line-length = 100

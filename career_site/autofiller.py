@@ -30,7 +30,7 @@ class CareerSiteAutofiller:
 
     Equipped with:
     1. Deterministic Multi-Signal Submission Verification
-    2. Strict 75-Second Timeout Per Job (prevents infinite hangs)
+    2. Fast 25-Second Anti-Freeze Timeout Per Job (prevents infinite hangs)
     3. Network & Dynamic SPA Event Synchronization
     4. Dual-Resume Stack Routing (Python vs Java)
     """

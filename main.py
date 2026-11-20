@@ -81,11 +81,20 @@ async def run_master_orchestrator(portal: str = "naukri", apply_url: str = ""):
 
 def main():
     parser = argparse.ArgumentParser(description="Nirantar Autonomous Job Application Engine")
-    parser.add_argument("--portal", type=str, default="naukri", help="Target portal: naukri, career_scraper, linkedin, ziprecruiter, indeed")
+    parser.add_argument(
+        "--portal",
+        type=str,
+        default="naukri",
+        choices=["naukri", "linkedin", "career_scraper", "all"],
+        help="Target portal: naukri, linkedin, career_scraper, all"
+    )
     parser.add_argument("--apply", type=str, default="", help="Direct apply to a specific external career page URL")
     args = parser.parse_args()
 
     asyncio.run(run_master_orchestrator(portal=args.portal, apply_url=args.apply))
+
+
+cli = main
 
 
 if __name__ == "__main__":
