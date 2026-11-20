@@ -47,6 +47,18 @@ async def run_master_orchestrator(portal: str = "naukri", apply_url: str = ""):
         console.print("[bold green]Launching Dedicated Naukri Master Agent...[/bold green]")
         agent = AutonomousNaukriAgent()
         await agent.run_continuous_engine()
+    elif portal_lower == "linkedin":
+        console.print("[bold cyan]Launching Dedicated LinkedIn Master Agent...[/bold cyan]")
+        from linkedin.agent import AutonomousLinkedInAgent
+        li_agent = AutonomousLinkedInAgent()
+        await li_agent.run()
+    elif portal_lower == "all":
+        console.print("[bold magenta]Launching Unified Multi-Agent Brain (Naukri + LinkedIn + Career Boards)...[/bold magenta]")
+        from linkedin.agent import AutonomousLinkedInAgent
+        li_agent = AutonomousLinkedInAgent()
+        await li_agent.run()
+        naukri_agent = AutonomousNaukriAgent()
+        await naukri_agent.run_continuous_engine()
     elif portal_lower == "career_scraper":
         console.print("[bold green]Launching Direct Career Pages Scraper...[/bold green]")
         from playwright.async_api import async_playwright

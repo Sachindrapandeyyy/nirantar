@@ -94,6 +94,32 @@ class CareerSiteAutofiller:
         except Exception:
             pass
 
+    async def human_type(self, locator: Locator, text: str):
+        """Simulates human typing rhythm with randomized keystroke jitter (25-55ms)."""
+        import random
+        try:
+            await locator.click()
+            await asyncio.sleep(0.08)
+            await locator.press_sequentially(str(text), delay=random.randint(25, 55))
+            await locator.evaluate("(el) => { el.dispatchEvent(new Event('input', { bubbles: true })); el.dispatchEvent(new Event('change', { bubbles: true })); }")
+        except Exception:
+            try:
+                await locator.fill(str(text))
+            except Exception:
+                pass
+
+    async def human_scroll(self, page: Page, distance: int = 350):
+        """Simulates smooth human scrolling behavior to look authentic to anti-bot systems."""
+        import random
+        steps = 4
+        chunk = distance // steps
+        for _ in range(steps):
+            try:
+                await page.evaluate(f"window.scrollBy({{top: {chunk}, behavior: 'smooth'}})")
+                await asyncio.sleep(random.uniform(0.08, 0.16))
+            except Exception:
+                pass
+
     def get_resume_path(self) -> Optional[Path]:
         """Fetches the verified resume from the candidate vault."""
         resume = vault.get_resume(self.resume_type)
@@ -580,15 +606,10 @@ class CareerSiteAutofiller:
 
                 if matched_val:
                     await self.highlight_element(inp, "#10b981")
-                    await inp.fill(str(matched_val))
-                    # Trigger native input events for React/Angular bindings
-                    try:
-                        await inp.evaluate("(el) => { el.dispatchEvent(new Event('input', { bubbles: true })); el.dispatchEvent(new Event('change', { bubbles: true })); }")
-                    except Exception:
-                        pass
-                    print(f"    [Field Filled] '{ctx[:30]}...' -> {str(matched_val)[:25]}", flush=True)
+                    await self.human_type(inp, str(matched_val))
+                    print(f"    [Field Filled (Human Rhythm)] '{ctx[:30]}...' -> {str(matched_val)[:25]}", flush=True)
                     filled_count += 1
-                    await asyncio.sleep(0.1)
+                    await asyncio.sleep(0.08)
             except Exception as e:
                 logger.debug(f"Error filling text input: {e}")
 
@@ -610,14 +631,10 @@ class CareerSiteAutofiller:
 
                 if matched_val:
                     await self.highlight_element(ta, "#10b981")
-                    await ta.fill(str(matched_val))
-                    try:
-                        await ta.evaluate("(el) => { el.dispatchEvent(new Event('input', { bubbles: true })); el.dispatchEvent(new Event('change', { bubbles: true })); }")
-                    except Exception:
-                        pass
-                    print(f"    [Textarea Filled] '{ctx[:30]}...' -> {str(matched_val)[:30]}...", flush=True)
+                    await self.human_type(ta, str(matched_val))
+                    print(f"    [Textarea Filled (Human Rhythm)] '{ctx[:30]}...' -> {str(matched_val)[:30]}...", flush=True)
                     filled_count += 1
-                    await asyncio.sleep(0.15)
+                    await asyncio.sleep(0.1)
             except Exception as e:
                 logger.debug(f"Error filling textarea: {e}")
 
@@ -845,6 +862,7 @@ class CareerSiteAutofiller:
         # Active Submission Verification Loop (up to 25 seconds)
         confirmed = False
         error_msg = ""
+        healing_attempts = 0
 
         print("  Verifying application submission with live server...", flush=True)
         for elapsed in range(1, 26):
@@ -873,12 +891,53 @@ class CareerSiteAutofiller:
             except Exception:
                 pass
 
-            # Check 3: Check for form validation errors that blocked submission
+            # Check 3: Check for form validation errors & Trigger Self-Healing Recovery Loop
             try:
-                error_loc = page.locator("div.error, span.error, [class*='error-message'], .has-error, [aria-invalid='true'], div.field-validation-error, div.alert-danger").first
+                error_loc = page.locator("div.error, span.error, [class*='error-message'], .has-error, [aria-invalid='true'], div.field-validation-error, div.alert-danger, p.text-red-500, span.text-danger").first
                 if await error_loc.count() > 0 and await error_loc.is_visible():
                     err_text = (await error_loc.inner_text()).strip()
-                    if err_text and ("require" in err_text.lower() or "invalid" in err_text.lower() or "error" in err_text.lower()):
+                    if err_text and any(w in err_text.lower() for w in ["require", "invalid", "error", "must", "valid", "select", "enter", "fill"]):
+                        if healing_attempts < 2:
+                            healing_attempts += 1
+                            print(f"  🔧 [Self-Healing Recovery {healing_attempts}/2] Validation error detected: '{err_text}'. Auto-correcting field...", flush=True)
+                            await self.inject_hud(page, "🔧 Self-Healing Error Fixer", f"Correcting: {err_text[:25]}")
+
+                            inv_inputs = await page.locator("input[aria-invalid='true'], .has-error input, .error input, select[aria-invalid='true'], .has-error select, textarea[aria-invalid='true']").all()
+                            if not inv_inputs:
+                                inv_inputs = await error_loc.locator("xpath=..//input | xpath=../..//input | xpath=..//select | xpath=../..//select").all()
+
+                            recovered_any = False
+                            for inv in inv_inputs:
+                                try:
+                                    inv_ctx = await self._get_element_context(inv)
+                                    if any(k in inv_ctx for k in ["phone", "mobile", "contact"]):
+                                        cur_p = await inv.input_value()
+                                        new_p = self.kb["full_phone"] if not cur_p.startswith("+") else self.kb["phone"]
+                                        await self.human_type(inv, new_p)
+                                        recovered_any = True
+                                        print(f"    Auto-corrected phone format -> {new_p}", flush=True)
+                                    elif any(k in inv_ctx for k in ["notice", "days"]):
+                                        await self.human_type(inv, "0")
+                                        recovered_any = True
+                                    elif "ctc" in inv_ctx:
+                                        await self.human_type(inv, "750000")
+                                        recovered_any = True
+                                    else:
+                                        solved = await solver.solve_question(f"{inv_ctx} (Fix Requirement: {err_text})", profile=self.profile)
+                                        if solved:
+                                            await self.human_type(inv, str(solved))
+                                            recovered_any = True
+                                            print(f"    Auto-solved invalid field -> {solved[:25]}", flush=True)
+                                except Exception:
+                                    pass
+
+                            if recovered_any:
+                                await asyncio.sleep(0.5)
+                                print("  Re-submitting corrected application form...", flush=True)
+                                await submit_btn.click()
+                                await asyncio.sleep(1.5)
+                                continue
+
                         error_msg = f"Form validation error: {err_text}"
                         print(f"  ⚠️ Submission blocked by validation error: {err_text}", flush=True)
                         break

@@ -81,3 +81,5 @@ def test_career_autofiller_init_and_resume():
     assert resume_path.exists()
     assert resume_path.suffix.lower() == ".pdf"
     assert autofiller.proof_dir.exists()
+    assert hasattr(autofiller, "human_type")
+    assert hasattr(autofiller, "human_scroll")
