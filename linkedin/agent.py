@@ -17,6 +17,7 @@ from tracker.database import db
 from core.matcher import matcher
 from naukri.filters import is_fresher_job
 from career_site.autofiller import CareerSiteAutofiller
+from config.settings import unlock_chrome_profile
 
 LINKEDIN_VECTORS = [
     {
@@ -221,13 +222,25 @@ class AutonomousLinkedInAgent:
         print(f" Candidate: {self.profile.full_name}", flush=True)
         print("=" * 70, flush=True)
 
+        unlock_chrome_profile(self.profile_dir)
+
         async with async_playwright() as p:
-            context = await p.chromium.launch_persistent_context(
-                str(self.profile_dir),
-                channel="chrome",
-                headless=False,
-                args=["--start-maximized", "--disable-blink-features=AutomationControlled", "--no-sandbox"]
-            )
+            launch_args = {
+                "user_data_dir": str(self.profile_dir),
+                "channel": "chrome",
+                "headless": False,
+                "args": ["--start-maximized", "--disable-blink-features=AutomationControlled", "--no-sandbox"]
+            }
+            try:
+                context = await p.chromium.launch_persistent_context(**launch_args)
+            except Exception as e:
+                if "ProcessSingleton" in str(e) or "already in use" in str(e):
+                    unlock_chrome_profile(self.profile_dir)
+                    await asyncio.sleep(2)
+                    context = await p.chromium.launch_persistent_context(**launch_args)
+                else:
+                    raise e
+
             page = context.pages[0] if context.pages else await context.new_page()
 
             for vector in LINKEDIN_VECTORS:

@@ -1,5 +1,6 @@
 import os
 from pathlib import Path
+from typing import Optional
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -46,3 +47,37 @@ settings = Settings()
 
 # Ensure directories exist
 settings.SCREENSHOTS_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def unlock_chrome_profile(profile_dir: Optional[Path] = None) -> None:
+    """
+    Terminates any orphaned Chrome processes holding locks on the profile directory
+    and cleans up SingletonLock, SingletonCookie, SingletonSocket to prevent
+    ProcessSingleton crash errors.
+    """
+    target_dir = profile_dir or settings.CHROME_USER_DATA_DIR
+    if not target_dir.exists():
+        target_dir.mkdir(parents=True, exist_ok=True)
+        return
+
+    import sys
+    if sys.platform == "win32":
+        try:
+            import subprocess
+            dir_name = target_dir.name
+            ps_script = (
+                f"$dir = '{dir_name}'; "
+                "Get-CimInstance Win32_Process -Filter \"Name = 'chrome.exe'\" | "
+                "Where-Object { $_.CommandLine -like ('*' + $dir + '*') } | "
+                "ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }"
+            )
+            subprocess.run(["powershell", "-NoProfile", "-Command", ps_script], capture_output=True, timeout=5)
+        except Exception:
+            pass
+
+    for pattern in ["Singleton*", "SingletonLock", "SingletonCookie", "SingletonSocket"]:
+        for f in target_dir.glob(pattern):
+            try:
+                f.unlink(missing_ok=True)
+            except Exception:
+                pass

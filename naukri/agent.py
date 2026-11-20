@@ -23,6 +23,7 @@ from core.matcher import JobMatcher
 from brain.question_solver import solver
 from naukri.filters import is_valid_software_role
 from career_site.autofiller import CareerSiteAutofiller
+from config.settings import unlock_chrome_profile
 
 matcher = JobMatcher()
 
@@ -647,6 +648,8 @@ class AutonomousNaukriAgent:
         print("Engine Mode: CONTINUOUS NON-STOP (Will keep running while laptop is on)", flush=True)
         print("=" * 75, flush=True)
 
+        unlock_chrome_profile(self.profile_dir)
+
         async with async_playwright() as p:
             launch_kwargs = {
                 "user_data_dir": str(self.profile_dir),
@@ -661,7 +664,17 @@ class AutonomousNaukriAgent:
                 "viewport": None
             }
 
-            context = await p.chromium.launch_persistent_context(**launch_kwargs)
+            try:
+                context = await p.chromium.launch_persistent_context(**launch_kwargs)
+            except Exception as e:
+                if "ProcessSingleton" in str(e) or "already in use" in str(e):
+                    print("⚠️ Profile lock detected. Re-cleaning locks and retrying launch...", flush=True)
+                    unlock_chrome_profile(self.profile_dir)
+                    await asyncio.sleep(2)
+                    context = await p.chromium.launch_persistent_context(**launch_kwargs)
+                else:
+                    raise e
+
             page = context.pages[0] if context.pages else await context.new_page()
 
             # Verify login
