@@ -118,10 +118,10 @@ class CareerSiteAutofiller:
         try:
             return await asyncio.wait_for(
                 self._execute_workflow(page, job_title, company, job_url),
-                timeout=75.0
+                timeout=25.0
             )
         except asyncio.TimeoutError:
-            print(f"  ⚠️ [TIMEOUT SKIPPED] Career portal for {company} took >75s. Safely aborting.", flush=True)
+            print(f"  ⚡ [SLOW SITE SKIPPED] Career portal for {company} took >25s. Fast-skipping to next job.", flush=True)
             safe_company = re.sub(r'[^a-zA-Z0-9]', '_', company)[:20]
             safe_title = re.sub(r'[^a-zA-Z0-9]', '_', job_title)[:20]
             proof_path = str(self.proof_dir / f"TIMEOUT_{safe_company}_{safe_title}_{int(time.time())}.png")
@@ -133,7 +133,7 @@ class CareerSiteAutofiller:
                 "success": False,
                 "status": "TIMEOUT",
                 "proof": proof_path,
-                "message": "Career application exceeded 75s timeout limit."
+                "message": "Career application exceeded 25s timeout limit (fast-skipped to prevent hang)."
             }
 
     async def dismiss_cookie_banners(self, page: Page):
@@ -180,12 +180,38 @@ class CareerSiteAutofiller:
 
         await self.inject_hud(page, f"Target: {company}", f"Role: {job_title[:30]} | Stack: {self.resume_type.upper()} | Detecting ATS...")
 
-        # Check for blank interstitial / loading screen
+        # 0. Fast Dead Page / Error Page Check (< 1s)
         try:
-            body_txt = await page.evaluate("() => document.body ? document.body.innerText.trim() : ''")
-            if len(body_txt) < 30:
+            page_title = (await page.title()).lower()
+            page_url_lower = page.url.lower()
+            page_body = (await page.evaluate("() => document.body ? document.body.innerText.trim() : ''")).lower()
+
+            dead_signatures = [
+                "404", "not found", "500 internal server error", "502 bad gateway",
+                "503 service unavailable", "site can't be reached", "server error",
+                "access denied", "403 forbidden", "dns_probe_finished", "err_connection",
+                "page not found", "job expired", "job is no longer available", "this site can’t be reached"
+            ]
+            if any(sig in page_title for sig in dead_signatures) or any(sig in page_body[:200] for sig in dead_signatures):
+                print(f"  ⚠️ [Dead Page Fast-Bail] Detected error page: '{page_title}'. Safely skipping in 1s.", flush=True)
+                return {
+                    "success": False,
+                    "status": "DEAD_PAGE",
+                    "message": f"Website unreachable or dead error page: {page_title}"
+                }
+
+            # Check for completely blank screen (<30 chars)
+            if len(page_body) < 30:
                 print("  Page appears blank/loading. Waiting 3s for hydration/redirect...", flush=True)
                 await asyncio.sleep(3)
+                page_body = (await page.evaluate("() => document.body ? document.body.innerText.trim() : ''")).lower()
+                if len(page_body) < 30:
+                    print("  ⚠️ [Blank Page Fast-Bail] Page stayed blank (<30 chars). Safely skipping to next job.", flush=True)
+                    return {
+                        "success": False,
+                        "status": "BLANK_PAGE",
+                        "message": "Career page is empty or failed to load."
+                    }
         except Exception:
             pass
 
@@ -402,6 +428,14 @@ class CareerSiteAutofiller:
             if visible_count < 2:
                 print(f"  Only {visible_count} visible input(s) found. Searching for 'Apply Now' form opener...", flush=True)
                 openers = [
+                    "a:has-text('I\'m Interested')",
+                    "button:has-text('I\'m Interested')",
+                    "a:has-text('I\'m interested')",
+                    "button:has-text('I\'m interested')",
+                    "a.apply_btn",
+                    "button.apply_btn",
+                    "a.apply_job",
+                    "#btn-apply",
                     "a:has-text('Apply for this job')",
                     "button:has-text('Apply for this job')",
                     "a:has-text('Apply Now')",

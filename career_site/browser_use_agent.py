@@ -15,6 +15,10 @@ from core.career_knowledge_base import get_career_knowledge_base
 from brain.question_solver import solver
 from config.settings import settings
 
+# Disable browser-use cloud telemetry and device login prompts
+os.environ["ANONYMIZED_TELEMETRY"] = "false"
+os.environ["BROWSER_USE_DISABLE_CLOUD"] = "true"
+
 try:
     from browser_use import Agent, Browser, Controller, ActionResult, ChatGoogle, ChatOpenAI
     BROWSER_USE_AVAILABLE = True
@@ -110,7 +114,9 @@ def get_browser_use_llm():
     """
     Resolves the best available multimodal LLM for Browser-Use:
     1. Gemini API (if GEMINI_API_KEY is present)
-    2. Local Ollama OpenAI-compatible endpoint (₹0 local inference)
+    2. OpenAI API (if OPENAI_API_KEY is present)
+    3. Local Ollama (ONLY if localhost:11434 is actively running)
+    Never defaults to browser-use cloud device authentication!
     """
     if not BROWSER_USE_AVAILABLE:
         return None
@@ -129,15 +135,20 @@ def get_browser_use_llm():
         except Exception:
             pass
 
-    # Fallback to local Ollama (OpenAI compatible endpoint)
+    # Only return Ollama if Ollama server is actively responding on localhost
     try:
-        return ChatOpenAI(
-            model=settings.OLLAMA_MODEL,
-            base_url=f"{settings.OLLAMA_BASE_URL}/v1",
-            api_key="ollama"
-        )
+        import urllib.request
+        with urllib.request.urlopen("http://localhost:11434/api/version", timeout=0.8) as resp:
+            if resp.status == 200:
+                return ChatOpenAI(
+                    model=settings.OLLAMA_MODEL,
+                    base_url=f"{settings.OLLAMA_BASE_URL}/v1",
+                    api_key="ollama"
+                )
     except Exception:
-        return None
+        pass
+
+    return None
 
 
 class AutonomousBrowserUseAgent:
@@ -197,7 +208,7 @@ Your Goal:
                 }
             )
 
-            history = await agent.run(max_steps=15)
+            history = await asyncio.wait_for(agent.run(max_steps=10), timeout=25.0)
             is_done = history.is_done()
 
             import time

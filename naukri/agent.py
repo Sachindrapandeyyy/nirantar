@@ -277,7 +277,7 @@ class AutonomousNaukriAgent:
 
         jd_page = await context.new_page()
         try:
-            await jd_page.goto(href, wait_until="domcontentloaded")
+            await jd_page.goto(href, wait_until="domcontentloaded", timeout=12000)
             await self.inject_hud(jd_page, f"Target: {title[:35]}", f"Auto-Selected: {resume_type.upper()} Resume | {reasoning[:35]}")
             await asyncio.sleep(1.8)
 
@@ -435,7 +435,7 @@ class AutonomousNaukriAgent:
             return False
 
         try:
-            await career_page.wait_for_load_state("domcontentloaded", timeout=25000)
+            await career_page.wait_for_load_state("domcontentloaded", timeout=10000)
         except Exception:
             pass
 
