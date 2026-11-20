@@ -265,6 +265,15 @@ class AutonomousNaukriAgent:
                     for alert in email_alerts:
                         if alert.get("type") == "INTERVIEW":
                             print(f"  🎯 [INTERVIEW INVITATION] {alert.get('subject')} from {alert.get('from')}", flush=True)
+                            try:
+                                from core.notifier import notify_user
+                                notify_user(
+                                    title="🎯 Interview Invitation Detected!",
+                                    message=f"{alert.get('subject')[:35]} from {alert.get('from')[:25]}",
+                                    alert_type="interview"
+                                )
+                            except Exception:
+                                pass
             except Exception:
                 pass
         except Exception as e:
@@ -373,6 +382,11 @@ class AutonomousNaukriAgent:
             )
             db.update_job_status(href, "APPLIED", proof_file)
             print(f"     ✔ APPLICATION #{self.total_applied} VERIFIED! [{resume_type.upper()} RESUME] Proof: {Path(proof_file).name}", flush=True)
+            try:
+                from core.notifier import notify_user
+                notify_user("Application Verified", f"#{self.total_applied}: {title[:30]} [{resume_type.upper()}]", alert_type="info")
+            except Exception:
+                pass
             await asyncio.sleep(1.5)
             await jd_page.close()
             return True
@@ -674,6 +688,13 @@ class AutonomousNaukriAgent:
                     context = await p.chromium.launch_persistent_context(**launch_kwargs)
                 else:
                     raise e
+
+            # Inject enterprise stealth & anti-fingerprinting evasions
+            try:
+                from core.stealth import apply_stealth_to_context
+                await apply_stealth_to_context(context)
+            except Exception:
+                pass
 
             page = context.pages[0] if context.pages else await context.new_page()
 

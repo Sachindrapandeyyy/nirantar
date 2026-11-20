@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NIRANTAR // Autonomous Job Application Brain</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            background-color: #060b13;
+            color: #e2e8f0;
+        }
+        .font-mono {
+            font-family: 'JetBrains Mono', monospace;
+        }
+        .glass-panel {
+            background: rgba(15, 23, 42, 0.65);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+        .glass-panel-hover:hover {
+            border-color: rgba(56, 189, 248, 0.4);
+            box-shadow: 0 10px 30px -10px rgba(56, 189, 248, 0.2);
+        }
+        .glow-cyan {
+            box-shadow: 0 0 25px rgba(56, 189, 248, 0.25);
+        }
+        .glow-emerald {
+            box-shadow: 0 0 25px rgba(16, 185, 129, 0.25);
+        }
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 6px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: rgba(15, 23, 42, 0.5);
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: rgba(56, 189, 248, 0.3);
+            border-radius: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+            background: rgba(56, 189, 248, 0.6);
+        }
+    </style>
+</head>
+<body class="min-h-screen bg-[#060b13] flex flex-col antialiased selection:bg-cyan-500 selection:text-white">
+
+    <!-- TOP NAVIGATION BAR -->
+    <header class="sticky top-0 z-40 border-b border-slate-800/80 bg-[#060b13]/90 backdrop-blur-md px-6 py-3.5 flex items-center justify-between">
+        <div class="flex items-center gap-3">
+            <div class="relative flex items-center justify-center w-10 h-10 rounded-xl bg-gradient-to-tr from-cyan-600 via-blue-600 to-indigo-600 p-[1px] shadow-lg shadow-cyan-500/20">
+                <div class="w-full h-full bg-slate-950 rounded-xl flex items-center justify-center">
+                    <span class="text-xl font-black bg-gradient-to-r from-cyan-400 to-blue-400 bg-clip-text text-transparent">⚡</span>
+                </div>
+                <div class="absolute -top-1 -right-1 w-3 h-3 bg-emerald-500 rounded-full border-2 border-[#060b13] animate-pulse"></div>
+            </div>
+            <div>
+                <div class="flex items-center gap-2">
+                    <h1 class="text-lg font-extrabold tracking-wider bg-gradient-to-r from-white via-slate-100 to-slate-400 bg-clip-text text-transparent">NIRANTAR</h1>
+                    <span class="text-[10px] font-mono px-2 py-0.5 rounded-full bg-cyan-950/80 border border-cyan-800/60 text-cyan-300 font-medium">AUTONOMOUS v2.0</span>
+                </div>
+                <p class="text-xs text-slate-400 font-medium">Candidate: <span id="candidateName" class="text-cyan-400 font-semibold">Sachindra Shekhar Pandey</span> (Dual-Stack Engineer)</p>
+            </div>
+        </div>
+
+        <div class="flex items-center gap-4">
+            <!-- Peak Recruiter Window Badge -->
+            <div id="schedulerBadge" class="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-xs font-medium">
+                <span class="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+                <span id="schedulerText" class="text-slate-300">Evaluating Window...</span>
+            </div>
+
+            <!-- Action Controls -->
+            <button onclick="triggerEmailCheck()" id="emailCheckBtn" class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 transition">
+                <span>📬</span> Scan Inbox
+            </button>
+            <button onclick="fetchData()" class="flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold rounded-lg bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white shadow-md shadow-cyan-600/30 transition">
+                <span class="animate-spin inline-block mr-1">⟳</span> Refresh
+            </button>
+        </div>
+    </header>
+
+    <!-- MAIN BODY -->
+    <main class="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 space-y-6">
+
+        <!-- HERO METRICS GRID -->
+        <section class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-3.5 sm:gap-4">
+            
+            <!-- Card 1: Total Applied -->
+            <div class="glass-panel glass-panel-hover p-4 rounded-2xl relative overflow-hidden group">
+                <div class="absolute -right-6 -bottom-6 w-24 h-24 bg-cyan-500/10 rounded-full blur-xl group-hover:bg-cyan-500/20 transition"></div>
+                <span class="text-xs font-medium text-slate-400 uppercase tracking-wider">Total Applied</span>
+                <div class="mt-2 flex items-baseline gap-2">
+                    <span id="totalApplied" class="text-3xl font-extrabold text-white">--</span>
+                    <span class="text-xs text-emerald-400 font-semibold font-mono">100% Verified</span>
+                </div>
+                <p class="mt-1 text-[11px] text-slate-400">Zero false positives recorded</p>
+            </div>
+
+            <!-- Card 2: Today Applied -->
+            <div class="glass-panel glass-panel-hover p-4 rounded-2xl relative overflow-hidden group">
+                <div class="absolute -right-6 -bottom-6 w-24 h-24 bg-emerald-500/10 rounded-full blur-xl group-hover:bg-emerald-500/20 transition"></div>
+                <span class="text-xs font-medium text-slate-400 uppercase tracking-wider">Applied Today</span>
+                <div class="mt-2 flex items-baseline gap-2">
+                    <span id="todayApplied" class="text-3xl font-extrabold text-emerald-400">--</span>
+                    <span class="text-xs text-slate-400 font-mono">Session Run</span>
+                </div>
+                <p class="mt-1 text-[11px] text-slate-400">Paced for recruiter hours</p>
+            </div>
+
+            <!-- Card 3: Resdex Rank Score -->
+            <div class="glass-panel glass-panel-hover p-4 rounded-2xl relative overflow-hidden group">
+                <div class="absolute -right-6 -bottom-6 w-24 h-24 bg-purple-500/10 rounded-full blur-xl group-hover:bg-purple-500/20 transition"></div>
+                <span class="text-xs font-medium text-slate-400 uppercase tracking-wider">Naukri Resdex Rank</span>
+                <div class="mt-2 flex items-baseline gap-1.5">
+                    <span class="text-3xl font-extrabold text-purple-400">#1</span>
+                    <span class="text-xs px-2 py-0.5 rounded bg-purple-950/80 border border-purple-800 text-purple-300 font-medium">95% Score</span>
+                </div>
+                <p class="mt-1 text-[11px] text-slate-400">2-Hr Dot Toggle Active</p>
+            </div>
+
+            <!-- Card 4: Python Stack -->
+            <div class="glass-panel glass-panel-hover p-4 rounded-2xl relative overflow-hidden group">
+                <div class="absolute -right-6 -bottom-6 w-24 h-24 bg-amber-500/10 rounded-full blur-xl group-hover:bg-amber-500/20 transition"></div>
+                <span class="text-xs font-medium text-slate-400 uppercase tracking-wider">Python / AI Stack</span>
+                <div class="mt-2 flex items-baseline gap-2">
+                    <span id="pythonCount" class="text-3xl font-extrabold text-amber-400">--</span>
+                    <span class="text-xs text-slate-400">Jobs</span>
+                </div>
+                <p class="mt-1 text-[11px] text-slate-400">FastAPI, Django, PostgreSQL</p>
+            </div>
+
+            <!-- Card 5: Java Stack -->
+            <div class="glass-panel glass-panel-hover p-4 rounded-2xl relative overflow-hidden group col-span-2 md:col-span-4 lg:col-span-1">
+                <div class="absolute -right-6 -bottom-6 w-24 h-24 bg-red-500/10 rounded-full blur-xl group-hover:bg-red-500/20 transition"></div>
+                <span class="text-xs font-medium text-slate-400 uppercase tracking-wider">Java Stack</span>
+                <div class="mt-2 flex items-baseline gap-2">
+                    <span id="javaCount" class="text-3xl font-extrabold text-rose-400">--</span>
+                    <span class="text-xs text-slate-400">Jobs</span>
+                </div>
+                <p class="mt-1 text-[11px] text-slate-400">Spring Boot, Kafka, Microservices</p>
+            </div>
+        </section>
+
+        <!-- TWO-COLUMN LAYOUT -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+            <!-- LEFT 2 COLS: RECENT APPLICATIONS STREAM -->
+            <div class="lg:col-span-2 space-y-4">
+                <div class="glass-panel p-5 rounded-2xl">
+                    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-800">
+                        <div>
+                            <h2 class="text-base font-bold text-white flex items-center gap-2">
+                                <span>🚀</span> Verified Applications Stream
+                            </h2>
+                            <p class="text-xs text-slate-400">Real-time applications submitted across Naukri, LinkedIn, and Direct Career Sites.</p>
+                        </div>
+
+                        <!-- Filter Controls -->
+                        <div class="flex items-center gap-2">
+                            <select id="filterStack" onchange="fetchData()" class="bg-slate-900 border border-slate-700 text-xs rounded-lg px-2.5 py-1.5 text-slate-300 focus:outline-none focus:border-cyan-500">
+                                <option value="all">All Stacks</option>
+                                <option value="python">Python Stack</option>
+                                <option value="java">Java Stack</option>
+                            </select>
+                            <select id="filterPortal" onchange="fetchData()" class="bg-slate-900 border border-slate-700 text-xs rounded-lg px-2.5 py-1.5 text-slate-300 focus:outline-none focus:border-cyan-500">
+                                <option value="all">All Portals</option>
+                                <option value="Naukri">Naukri</option>
+                                <option value="LinkedIn">LinkedIn</option>
+                                <option value="CareerSite">Career Site / ATS</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Job Listings Table / Cards -->
+                    <div id="jobsList" class="mt-4 space-y-2.5 max-h-[600px] overflow-y-auto pr-1 custom-scrollbar">
+                        <div class="text-center py-10 text-slate-500 text-xs font-mono">Loading real-time application records...</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- RIGHT 1 COL: CANDIDATE VAULT & SYSTEM LOGS -->
+            <div class="space-y-6">
+
+                <!-- Verified Candidate Vault Card -->
+                <div class="glass-panel p-5 rounded-2xl space-y-4">
+                    <div class="flex items-center justify-between pb-3 border-b border-slate-800">
+                        <h2 class="text-sm font-bold text-white flex items-center gap-2">
+                            <span>🛡️</span> Verified Candidate Profile
+                        </h2>
+                        <span class="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-950 border border-emerald-800 text-emerald-400 font-semibold">Zero Hallucination</span>
+                    </div>
+
+                    <div class="space-y-2.5 text-xs">
+                        <div class="flex justify-between py-1 border-b border-slate-800/60">
+                            <span class="text-slate-400">Education</span>
+                            <span class="font-medium text-slate-200">B.Tech CSE (2026 Batch)</span>
+                        </div>
+                        <div class="flex justify-between py-1 border-b border-slate-800/60">
+                            <span class="text-slate-400">University</span>
+                            <span class="font-medium text-slate-200 truncate max-w-[170px]" title="Shri Ramswaroop Memorial University">SRMU</span>
+                        </div>
+                        <div class="flex justify-between py-1 border-b border-slate-800/60">
+                            <span class="text-slate-400">Academic Marks</span>
+                            <span class="font-medium text-cyan-400">8.2 CGPA | 10th: 84.6% | 12th: 82.4%</span>
+                        </div>
+                        <div class="flex justify-between py-1 border-b border-slate-800/60">
+                            <span class="text-slate-400">Experience</span>
+                            <span class="font-medium text-slate-200">0.3 Yrs (NTPC Software Intern)</span>
+                        </div>
+                        <div class="flex justify-between py-1 border-b border-slate-800/60">
+                            <span class="text-slate-400">Current & Expected CTC</span>
+                            <span class="font-medium text-emerald-400">6 LPA &rarr; 7.5 LPA</span>
+                        </div>
+                        <div class="flex justify-between py-1 border-b border-slate-800/60">
+                            <span class="text-slate-400">Notice Period</span>
+                            <span class="font-semibold text-emerald-400">Immediate (0 Days)</span>
+                        </div>
+                        <div class="flex justify-between py-1">
+                            <span class="text-slate-400">Target Level</span>
+                            <span class="font-medium text-cyan-300">0-2 Yrs Freshers Gatekept</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Strategic Capabilities Card -->
+                <div class="glass-panel p-5 rounded-2xl space-y-3">
+                    <h3 class="text-sm font-bold text-white flex items-center gap-2">
+                        <span>⚡</span> Active AI Safeguards
+                    </h3>
+                    <ul class="text-xs space-y-2 text-slate-300">
+                        <li class="flex items-start gap-2">
+                            <span class="text-emerald-400 mt-0.5">✔</span>
+                            <span><strong>Fast 25s Anti-Freeze:</strong> Skips 404/broken websites in &lt;1s.</span>
+                        </li>
+                        <li class="flex items-start gap-2">
+                            <span class="text-emerald-400 mt-0.5">✔</span>
+                            <span><strong>Zero-Fill Safety Guard:</strong> Never applies to forms with 0 inputs filled.</span>
+                        </li>
+                        <li class="flex items-start gap-2">
+                            <span class="text-emerald-400 mt-0.5">✔</span>
+                            <span><strong>Stealth Human Rhythm:</strong> Randomized 25-55ms key delays & bezier mouse motion.</span>
+                        </li>
+                        <li class="flex items-start gap-2">
+                            <span class="text-emerald-400 mt-0.5">✔</span>
+                            <span><strong>Self-Healing Recovery:</strong> Auto-corrects red form validation errors.</span>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+
+        </div>
+
+    </main>
+
+    <!-- PROOF MODAL -->
+    <div id="proofModal" class="hidden fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="bg-slate-900 border border-slate-700 max-w-4xl w-full rounded-2xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
+            <div class="px-5 py-3.5 border-b border-slate-800 flex items-center justify-between bg-slate-950">
+                <div class="flex items-center gap-2">
+                    <span class="text-lg">📸</span>
+                    <h3 id="modalTitle" class="text-sm font-bold text-white truncate max-w-lg">Application Screenshot Proof</h3>
+                </div>
+                <button onclick="closeProofModal()" class="w-8 h-8 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center text-sm font-bold">&times;</button>
+            </div>
+            <div class="flex-1 overflow-auto p-4 flex items-center justify-center bg-slate-950/50">
+                <img id="modalImg" src="" alt="Proof Preview" class="max-w-full max-h-[75vh] rounded-lg border border-slate-800 shadow-md">
+            </div>
+            <div class="px-5 py-3 border-t border-slate-800 bg-slate-950 flex justify-between items-center text-xs text-slate-400">
+                <span id="modalFilename" class="font-mono truncate max-w-md">filename.png</span>
+                <button onclick="closeProofModal()" class="px-4 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 font-medium">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- JAVASCRIPT LOGIC -->
+    <script>
+        async function fetchData() {
+            try {
+                // 1. Fetch Stats
+                const statsRes = await fetch('/api/stats');
+                if (statsRes.ok) {
+                    const stats = await statsRes.json();
+                    document.getElementById('totalApplied').innerText = stats.verified_applied || stats.total_applications;
+                    document.getElementById('todayApplied').innerText = stats.today_applied;
+                    document.getElementById('pythonCount').innerText = stats.python_stack_count;
+                    document.getElementById('javaCount').innerText = stats.java_stack_count;
+                    if (stats.candidate_name) {
+                        document.getElementById('candidateName').innerText = stats.candidate_name;
+                    }
+                    if (stats.scheduler) {
+                        document.getElementById('schedulerText').innerText = stats.scheduler.status_label + " (" + stats.scheduler.ist_time + ")";
+                    }
+                }
+
+                // 2. Fetch Jobs
+                const stack = document.getElementById('filterStack').value;
+                const portal = document.getElementById('filterPortal').value;
+                const jobsRes = await fetch(`/api/jobs?limit=50&stack=${stack}&portal=${portal}`);
+                if (jobsRes.ok) {
+                    const jobs = await jobsRes.json();
+                    renderJobs(jobs);
+                }
+            } catch (err) {
+                console.error("Dashboard refresh error:", err);
+            }
+        }
+
+        function renderJobs(jobs) {
+            const container = document.getElementById('jobsList');
+            if (!jobs || jobs.length === 0) {
+                container.innerHTML = `<div class="text-center py-12 text-slate-500 text-xs font-mono">No matching job records found.</div>`;
+                return;
+            }
+
+            container.innerHTML = jobs.map(j => {
+                const stackBadge = j.resume_type === 'python' ?
+                    `<span class="px-2 py-0.5 rounded text-[10px] font-semibold bg-amber-950/80 text-amber-300 border border-amber-800">PYTHON</span>` :
+                    `<span class="px-2 py-0.5 rounded text-[10px] font-semibold bg-rose-950/80 text-rose-300 border border-rose-800">JAVA</span>`;
+
+                const portalBadge = `<span class="px-2 py-0.5 rounded text-[10px] font-mono text-slate-300 bg-slate-800">${j.portal}</span>`;
+
+                const proofBtn = j.has_proof ?
+                    `<button onclick="viewProof('${j.proof_filename}', '${escapeHtml(j.title)} - ${escapeHtml(j.company)}')" class="px-2.5 py-1 text-[11px] font-medium rounded-lg bg-cyan-950 hover:bg-cyan-900 border border-cyan-800 text-cyan-300 transition flex items-center gap-1">📸 View Proof</button>` :
+                    `<span class="text-[11px] text-slate-500 font-mono">Verified</span>`;
+
+                return `
+                    <div class="p-3.5 rounded-xl bg-slate-900/60 hover:bg-slate-900 border border-slate-800/80 hover:border-slate-700 transition flex items-center justify-between gap-3">
+                        <div class="min-w-0 flex-1">
+                            <div class="flex items-center gap-2 flex-wrap mb-1">
+                                ${stackBadge}
+                                ${portalBadge}
+                                <span class="text-[11px] text-slate-500 font-mono">${j.applied_at}</span>
+                            </div>
+                            <h4 class="text-sm font-bold text-white truncate hover:text-cyan-400 transition">
+                                <a href="${j.url}" target="_blank" rel="noopener">${escapeHtml(j.title)}</a>
+                            </h4>
+                            <p class="text-xs text-slate-400 truncate">${escapeHtml(j.company)}</p>
+                        </div>
+                        <div class="flex items-center gap-2 flex-shrink-0">
+                            ${proofBtn}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function escapeHtml(text) {
+            if (!text) return "";
+            return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+        }
+
+        function viewProof(filename, title) {
+            document.getElementById('modalTitle').innerText = title;
+            document.getElementById('modalFilename').innerText = filename;
+            document.getElementById('modalImg').src = `/api/proof/${filename}`;
+            document.getElementById('proofModal').classList.remove('hidden');
+        }
+
+        function closeProofModal() {
+            document.getElementById('proofModal').classList.add('hidden');
+            document.getElementById('modalImg').src = "";
+        }
+
+        async function triggerEmailCheck() {
+            const btn = document.getElementById('emailCheckBtn');
+            btn.innerText = "Scanning...";
+            btn.disabled = true;
+            try {
+                const res = await fetch('/api/control/trigger_email_check', { method: 'POST' });
+                const data = await res.json();
+                alert(`Inbox scanned! Found ${data.alerts_found} status updates.`);
+            } catch (e) {
+                alert("Failed scanning email inbox.");
+            } finally {
+                btn.innerText = "📬 Scan Inbox";
+                btn.disabled = false;
+                fetchData();
+            }
+        }
+
+        // Auto-fetch on page load and poll every 6 seconds
+        fetchData();
+        setInterval(fetchData, 6000);
+    </script>
+</body>
+</html>

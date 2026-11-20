@@ -241,6 +241,12 @@ class AutonomousLinkedInAgent:
                 else:
                     raise e
 
+            try:
+                from core.stealth import apply_stealth_to_context
+                await apply_stealth_to_context(context)
+            except Exception:
+                pass
+
             page = context.pages[0] if context.pages else await context.new_page()
 
             for vector in LINKEDIN_VECTORS:

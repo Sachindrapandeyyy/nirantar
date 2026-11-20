@@ -89,7 +89,14 @@ def main():
         help="Target portal: naukri, linkedin, career_scraper, all"
     )
     parser.add_argument("--apply", type=str, default="", help="Direct apply to a specific external career page URL")
+    parser.add_argument("--dashboard", action="store_true", help="Launch interactive Mission Control web dashboard (http://localhost:8000)")
     args = parser.parse_args()
+
+    if args.dashboard:
+        console.print("\n[bold cyan]🚀 Launching Nirantar Mission Control Web Dashboard on http://localhost:8000 ...[/bold cyan]")
+        from dashboard.server import run_dashboard_server
+        run_dashboard_server(port=8000, open_browser=True)
+        return
 
     asyncio.run(run_master_orchestrator(portal=args.portal, apply_url=args.apply))
 
